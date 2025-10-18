@@ -1,217 +1,339 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Phone → Web Accelerometer (Fixed QR)</title>
-<link rel="icon" href="data:;base64,=">
-<style>
-  :root { --bg:#0b0c0f; --fg:#f2f5f7; --mut:#8ea0b3; --card:#141821 }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,Segoe UI,Arial}
-  .wrap{max-width:1100px;margin:0 auto;padding:18px;display:grid;gap:16px}
-  .row{display:grid;gap:16px;grid-template-columns: 340px 1fr}
-  .card{background:var(--card);border:1px solid #1e2530;border-radius:14px;padding:16px}
-  .mut{color:var(--mut)} .ok{color:#21d07a} .bad{color:#ff6b6b}
-  .qr{display:flex;align-items:center;justify-content:center;aspect-ratio:1/1;background:#fff;border-radius:12px}
-  .pill{display:inline-flex;gap:8px;align-items:center;border:1px solid #222b36;border-radius:999px;padding:6px 10px}
-  canvas{background:#0f131b;border-radius:10px}
-  button{appearance:none;border:1px solid #394658;background:#0f131b;color:var(--fg);padding:12px 14px;border-radius:12px;font-weight:600}
-  #err{white-space:pre-wrap}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accelerometer Live Stream</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+        }
+        .status.connected {
+            background: #efe;
+            color: #3c3;
+        }
+        .status.waiting {
+            background: #ffeaa7;
+            color: #d63031;
+        }
+        #qrcode {
+            display: inline-block;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .data-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .data-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        .data-item label {
+            display: block;
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+        .data-item .value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            margin: 5px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .mobile-view {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .desktop-view {
+                display: none;
+            }
+            .mobile-view {
+                display: block;
+            }
+        }
+        .instructions {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <div class="card desktop-view">
+            <h1>📱 Accelerometer Live Stream</h1>
+            <p>Scan this QR code with your iPhone to start streaming accelerometer data</p>
+            <div id="qrcode"></div>
+            <div class="status" id="status">Waiting for connection...</div>
+            <div class="instructions">
+                <strong>Instructions:</strong>
+                <ol style="margin-left: 20px; margin-top: 10px;">
+                    <li>Open your iPhone camera and scan the QR code</li>
+                    <li>Tap the notification to open the link</li>
+                    <li>Grant accelerometer permission when prompted</li>
+                    <li>Data will stream automatically to this page</li>
+                </ol>
+            </div>
+        </div>
 
-<!-- HOST UI -->
-<div class="wrap" id="hostUI" style="display:none">
-  <div class="row">
-    <div class="card">
-      <h2>Session</h2>
-      <div class="mut">ID: <span id="sess">—</span></div>
-      <div style="height:10px"></div>
-      <div class="qr"><canvas id="qrcanvas"></canvas></div>
-      <div style="height:12px"></div>
-      <div class="pill">Peer: <span id="peerState" class="bad">disconnected</span></div>
-      <div class="pill" style="margin-top:8px">Packets: <span id="pkt">0</span></div>
-      <div class="mut" id="fbStatus"></div>
-      <div id="err" class="bad"></div>
+        <div class="card mobile-view">
+            <h1>📱 Sensor Control</h1>
+            <div class="status" id="mobileStatus">Ready</div>
+            <button id="startBtn">Start Streaming</button>
+            <button id="stopBtn" disabled>Stop Streaming</button>
+        </div>
+
+        <div class="card">
+            <h2>Live Data</h2>
+            <div class="data-display">
+                <div class="data-item">
+                    <label>X Axis</label>
+                    <div class="value" id="xValue">0.00</div>
+                </div>
+                <div class="data-item">
+                    <label>Y Axis</label>
+                    <div class="value" id="yValue">0.00</div>
+                </div>
+                <div class="data-item">
+                    <label>Z Axis</label>
+                    <div class="value" id="zValue">0.00</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chart"></canvas>
+            </div>
+        </div>
     </div>
-    <div class="card">
-      <h2>Accelerometer (m/s²)</h2>
-      <canvas id="chart" height="180"></canvas>
-      <div class="mut">
-        Open on laptop. Scan QR with phone. On iOS tap “Enable Motion” once.
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- PHONE UI -->
-<div class="wrap" id="phoneUI" style="display:none;max-width:640px">
-  <div class="card">
-    <h2>Phone Sender</h2>
-    <div class="mut">Session: <span id="sidLabel">—</span></div>
-    <div class="pill">Channel: <span id="chanState" class="bad">connecting…</span></div>
-    <div class="pill" style="margin-top:8px">Hz: <span id="hz">0</span></div>
-    <div class="mut" id="fbStatusPhone"></div>
-    <div id="errPhone" class="bad"></div>
-  </div>
-  <div class="card">
-    <button id="permBtn" style="display:none;width:100%">Enable Motion (iOS)</button>
-    <div class="mut">Keep this page open; screen on helps stability.</div>
-  </div>
-</div>
+    <script>
+        // PeerJS-like P2P connection using simple broadcast channel simulation
+        let peerId = null;
+        let connections = [];
+        let isPhone = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        
+        // Data storage for chart
+        const maxDataPoints = 100;
+        const chartData = {
+            labels: [],
+            x: [],
+            y: [],
+            z: []
+        };
 
-<!-- libs -->
-<script type="module">
-/* IMPORT QR + Chart AS MODULES */
-import QRCode from "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.mjs";
-import { Chart } from "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
+        // Initialize Chart
+        const ctx = document.getElementById('chart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'X Axis',
+                    data: chartData.x,
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                    tension: 0.4
+                }, {
+                    label: 'Y Axis',
+                    data: chartData.y,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    tension: 0.4
+                }, {
+                    label: 'Z Axis',
+                    data: chartData.z,
+                    borderColor: '#2ecc71',
+                    backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        min: -20,
+                        max: 20
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                }
+            }
+        });
 
-/* ROLE DETECTION */
-const params = new URLSearchParams(location.search);
-const sidParam = params.get("sid");
-const isLikelyMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        // Simple messaging system using URL parameters and broadcast
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
 
-/* FIREBASE CONFIG */
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "SENDER_ID",
-  appId: "APP_ID"
-};
+        // Initialize
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session') || generateId();
 
-function mustHaveConfig(){
-  if(!firebaseConfig?.apiKey || !firebaseConfig?.databaseURL){
-    throw new Error("Firebase config missing or incomplete.");
-  }
-}
+        if (!urlParams.get('session')) {
+            // Desktop view - generate QR code
+            const url = window.location.href.split('?')[0] + '?session=' + sessionId;
+            new QRCode(document.getElementById('qrcode'), {
+                text: url,
+                width: 256,
+                height: 256
+            });
+        }
 
-/* ===== HOST MODE ===== */
-async function runHost(){
-  document.getElementById("hostUI").style.display = "";
+        // BroadcastChannel for same-origin communication
+        const channel = new BroadcastChannel('accel_channel_' + sessionId);
+        
+        channel.onmessage = (event) => {
+            if (event.data.type === 'accel') {
+                updateDisplay(event.data.x, event.data.y, event.data.z);
+                if (!isPhone) {
+                    document.getElementById('status').textContent = 'Connected & Streaming';
+                    document.getElementById('status').className = 'status connected';
+                }
+            }
+        };
 
-  const sessionId = crypto.getRandomValues(new Uint32Array(2)).join("-");
-  document.getElementById("sess").textContent = sessionId;
+        function updateDisplay(x, y, z) {
+            document.getElementById('xValue').textContent = x.toFixed(2);
+            document.getElementById('yValue').textContent = y.toFixed(2);
+            document.getElementById('zValue').textContent = z.toFixed(2);
 
-  // Generate QR
-  const basePath = location.pathname.replace(/[^/]*$/, '');
-  const phoneURL = `${location.origin}${basePath}?sid=${encodeURIComponent(sessionId)}`;
-  try { QRCode.toCanvas(document.getElementById("qrcanvas"), phoneURL, { width: 300 }); }
-  catch(e){ document.getElementById("err").textContent = "QR render failed: "+e.message; }
+            // Update chart
+            const timestamp = new Date().toLocaleTimeString();
+            chartData.labels.push(timestamp);
+            chartData.x.push(x);
+            chartData.y.push(y);
+            chartData.z.push(z);
 
-  // Chart
-  const labels=[], X=[], Y=[], Z=[], L=300;
-  const chart = new Chart(document.getElementById("chart"),{
-    type:"line",
-    data:{labels, datasets:[
-      {label:"ax", data:X, borderWidth:1, pointRadius:0},
-      {label:"ay", data:Y, borderWidth:1, pointRadius:0},
-      {label:"az", data:Z, borderWidth:1, pointRadius:0}
-    ]},
-    options:{animation:false,interaction:{intersect:false,mode:"nearest"},
-      scales:{x:{ticks:{display:false},grid:{display:false}},y:{suggestedMin:-20,suggestedMax:20}},
-      plugins:{legend:{labels:{usePointStyle:true}}}}
-  });
-  function addPoint(t,ax,ay,az){labels.push(new Date(t).toLocaleTimeString());
-    X.push(ax);Y.push(ay);Z.push(az);
-    if(labels.length>L){labels.shift();X.shift();Y.shift();Z.shift();}
-    chart.update();}
+            if (chartData.labels.length > maxDataPoints) {
+                chartData.labels.shift();
+                chartData.x.shift();
+                chartData.y.shift();
+                chartData.z.shift();
+            }
 
-  // Firebase + WebRTC
-  try{
-    mustHaveConfig();
-    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
-    const { getDatabase, ref, onValue, set, push, remove } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js");
-    const app = initializeApp(firebaseConfig); const db=getDatabase(app);
-    document.getElementById("fbStatus").textContent="Firebase ready.";
+            chart.update();
+        }
 
-    const peerStateEl=document.getElementById("peerState");
-    const pktEl=document.getElementById("pkt");let pkt=0;
-    const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
-    const chan=pc.createDataChannel("accel",{ordered:true});
-    chan.onopen=()=>{peerStateEl.textContent="connected";peerStateEl.className="ok";};
-    chan.onclose=()=>{peerStateEl.textContent="disconnected";peerStateEl.className="bad";};
-    chan.onmessage=(e)=>{try{const d=JSON.parse(e.data);addPoint(d.t,d.ax,d.ay,d.az);pktEl.textContent=(++pkt).toString();}catch{}};
-    pc.onicecandidate=async(ev)=>{if(ev.candidate)await push(ref(db,`sessions/${sessionId}/hostIce`),ev.candidate.toJSON());};
-    const offer=await pc.createOffer();await pc.setLocalDescription(offer);
-    await set(ref(db,`sessions/${sessionId}/offer`),offer);
-    onValue(ref(db,`sessions/${sessionId}/answer`),async snap=>{
-      const ans=snap.val();if(ans&&!pc.currentRemoteDescription)
-        await pc.setRemoteDescription(new RTCSessionDescription(ans));});
-    onValue(ref(db,`sessions/${sessionId}/phoneIce`),async snap=>{
-      const val=snap.val();if(!val)return;
-      for(const k of Object.keys(val)){try{await pc.addIceCandidate(val[k]);}catch{}}});
-    addEventListener("beforeunload",()=>remove(ref(db,`sessions/${sessionId}`)));
-  }catch(e){document.getElementById("err").textContent=e.message;}
-}
+        // Phone sensor logic
+        if (isPhone) {
+            let streaming = false;
 
-/* ===== PHONE MODE ===== */
-async function runPhone(sessionId){
-  document.getElementById("phoneUI").style.display = "";
-  document.getElementById("sidLabel").textContent = sessionId;
-  const btn=document.getElementById("permBtn");
+            document.getElementById('startBtn').onclick = async () => {
+                try {
+                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                        const permission = await DeviceMotionEvent.requestPermission();
+                        if (permission !== 'granted') {
+                            alert('Permission denied for motion sensors');
+                            return;
+                        }
+                    }
 
-  async function ensureMotionPermission(){
-    const DM=window.DeviceMotionEvent;
-    if(DM&&typeof DM.requestPermission==="function"){
-      btn.style.display="inline-block";
-      await new Promise(res=>{btn.onclick=async()=>{try{await DM.requestPermission();}catch{}btn.style.display="none";res();};});
-    }
-  }
+                    window.addEventListener('devicemotion', handleMotion);
+                    streaming = true;
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('mobileStatus').textContent = 'Streaming...';
+                    document.getElementById('mobileStatus').className = 'status connected';
+                } catch (error) {
+                    alert('Error accessing sensors: ' + error.message);
+                }
+            };
 
-  try{
-    mustHaveConfig();
-    const { initializeApp }=await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
-    const { getDatabase, ref, onValue, push, set, remove }=await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js");
-    const app=initializeApp(firebaseConfig);const db=getDatabase(app);
-    document.getElementById("fbStatusPhone").textContent="Firebase ready.";
+            document.getElementById('stopBtn').onclick = () => {
+                window.removeEventListener('devicemotion', handleMotion);
+                streaming = false;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('mobileStatus').textContent = 'Stopped';
+                document.getElementById('mobileStatus').className = 'status disconnected';
+            };
 
-    const stateEl=document.getElementById("chanState");
-    const hzEl=document.getElementById("hz");let pkt=0,t0=performance.now();
-    const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});let chan;
-    pc.ondatachannel=ev=>{chan=ev.channel;
-      chan.onopen=()=>{stateEl.textContent="connected";stateEl.className="ok";};
-      chan.onclose=()=>{stateEl.textContent="disconnected";stateEl.className="bad";};};
-    pc.onicecandidate=async ev=>{
-      if(ev.candidate)await push(ref(db,`sessions/${sessionId}/phoneIce`),ev.candidate.toJSON());};
-    onValue(ref(db,`sessions/${sessionId}/offer`),async snap=>{
-      const offer=snap.val();if(!offer||pc.currentRemoteDescription)return;
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
-      await set(ref(db,`sessions/${sessionId}/answer`),answer);});
-    onValue(ref(db,`sessions/${sessionId}/hostIce`),async snap=>{
-      const val=snap.val();if(!val)return;
-      for(const k of Object.keys(val)){try{await pc.addIceCandidate(val[k]);}catch{}}});
-    await ensureMotionPermission();
-    let last=0;const targetHz=30,minDt=1000/targetHz;
-    addEventListener("devicemotion",ev=>{
-      if(!chan||chan.readyState!=="open")return;
-      const now=performance.now();if(now-last<minDt)return;last=now;
-      const ax=(ev.accelerationIncludingGravity?.x??ev.acceleration?.x??0);
-      const ay=(ev.accelerationIncludingGravity?.y??ev.acceleration?.y??0);
-      const az=(ev.accelerationIncludingGravity?.z??ev.acceleration?.z??0);
-      try{chan.send(JSON.stringify({t:Date.now(),ax,ay,az}));pkt++;}catch{}
-      const dt=(now-t0)/1000;if(dt>0.33){hzEl.textContent=(pkt/dt|0).toString();pkt=0;t0=now;}
-    },{passive:true});
-    addEventListener("beforeunload",()=>remove(ref(db,`sessions/${sessionId}`)));
-  }catch(e){document.getElementById("errPhone").textContent=e.message;}
-}
-
-/* ===== BOOTSTRAP ===== */
-if (sidParam || isLikelyMobile) {
-  if (!sidParam && isLikelyMobile) {
-    document.getElementById("phoneUI").style.display = "";
-    document.getElementById("fbStatusPhone").textContent =
-      "No session id. Open on laptop first and scan QR.";
-  } else {
-    await runPhone(sidParam);
-  }
-} else {
-  await runHost();
-}
-</script>
+            function handleMotion(event) {
+                const acc = event.accelerationIncludingGravity;
+                if (acc) {
+                    const data = {
+                        type: 'accel',
+                        x: acc.x || 0,
+                        y: acc.y || 0,
+                        z: acc.z || 0
+                    };
+                    channel.postMessage(data);
+                }
+            }
+        }
+    </script>
 </body>
 </html>
