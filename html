@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Accel Stream — Phone</title>
+<link rel="icon" href="data:;base64,=">
+<style>
+  :root { --bg:#0b0c0f; --fg:#f2f5f7; --mut:#8e9aa7; --card:#141821; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,Segoe UI,Arial}
+  .wrap{max-width:600px;margin:0 auto;padding:24px;display:grid;gap:16px}
+  .card{background:var(--card);border:1px solid #1e2530;border-radius:14px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+  button{appearance:none;border:1px solid #394658;background:#0f131b;color:var(--fg);padding:12px 14px;border-radius:12px;font-weight:600;width:100%}
+  .mut{color:var(--mut)}
+  .pill{display:inline-flex;gap:8px;align-items:center;border:1px solid #222b36;border-radius:999px;padding:6px 10px}
+  .ok{color:#4cd137}.bad{color:#ff6b6b}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h2 style="margin:0 0 8px">Phone Sender</h2>
+    <div class="mut" id="sid"></div>
+    <div style="height:10px"></div>
+    <div class="pill">Channel: <span id="state" class="bad">connecting…</span></div>
+    <div class="pill" style="margin-top:8px">Hz: <span id="hz">0</span></div>
+  </div>
+  <div class="card">
+    <button id="startBtn" style="display:none">Enable Motion (iOS/Safari)</button>
+    <div class="mut">This page streams accelerometer data to the host. Keep it open and the screen on.</div>
+  </div>
+</div>
+
+<script type="module">
+  /************ 1) Firebase (paste your config) ************/
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, onValue, push, set, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+  const firebaseConfig = {
+    // TODO: replace with your Firebase web app config (same as index.html)
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "SENDER_ID",
+    appId: "APP_ID"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  /************ 2) Session ************/
+  const params   = new URLSearchParams(location.search);
+  const sessionId = params.get("sid") || "missing";
+  document.getElementById("sid").textContent = "Session: " + sessionId;
+
+  /************ 3) WebRTC (phone answers) ************/
+  const stateEl = document.getElementById("state");
+  const hzEl    = document.getElementById("hz");
+  let pkt = 0, t0 = performance.now();
+
+  const pc = new RTCPeerConnection({ iceServers: [{urls:"stun:stun.l.google.com:19302"}] });
+  let chan;
+  pc.ondatachannel = ev => {
+    chan = ev.channel;
+    chan.onopen  = () => { stateEl.textContent = "connected"; stateEl.className="ok"; };
+    chan.onclose = () => { stateEl.textContent = "disconnected"; stateEl.className="bad"; };
+  };
+  pc.onicecandidate = async e => {
+    if (e.candidate) await push(ref(db, `sessions/${sessionId}/phoneIce`), e.candidate.toJSON());
+  };
+
+  // Get host offer, create answer
+  onValue(ref(db, `sessions/${sessionId}/offer`), async snap => {
+    const offer = snap.val();
+    if (!offer) return;
+    if (!pc.currentRemoteDescription) {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await set(ref(db, `sessions/${sessionId}/answer`), answer);
+    }
+  });
+
+  // Host ICE (optional)
+  onValue(ref(db, `sessions/${sessionId}/hostIce`), async snap => {
+    const val = snap.val();
+    if (!val) return;
+    for (const k of Object.keys(val)) {
+      try { await pc.addIceCandidate(val[k]); } catch {}
+    }
+  });
+
+  addEventListener("beforeunload", () => remove(ref(db, `sessions/${sessionId}`)));
+
+  /************ 4) Motion sensors ************/
+  const startBtn = document.getElementById("startBtn");
+
+  async function ensurePermissionIfNeeded(){
+    // iOS Safari requires user gesture + permission call
+    const DM = window.DeviceMotionEvent;
+    if (DM && typeof DM.requestPermission === "function") {
+      startBtn.style.display = "block";
+      return new Promise(resolve => {
+        startBtn.onclick = async () => {
+          try { await DM.requestPermission(); } catch {}
+          startBtn.style.display = "none";
+          resolve();
+        };
+      });
+    }
+  }
+
+  function startStreaming(){
+    let lastSend = 0;
+    const targetHz = 30;                 // throttle to ~30 Hz to be kind to radios
+    const minDt = 1000/targetHz;
+
+    window.addEventListener("devicemotion", ev => {
+      const now = performance.now();
+      if (!chan || chan.readyState !== "open") return;
+      if (now - lastSend < minDt) return;
+      lastSend = now;
+
+      const ax = (ev.accelerationIncludingGravity?.x ?? ev.acceleration?.x ?? 0);
+      const ay = (ev.accelerationIncludingGravity?.y ?? ev.acceleration?.y ?? 0);
+      const az = (ev.accelerationIncludingGravity?.z ?? ev.acceleration?.z ?? 0);
+      const msg = JSON.stringify({ t: Date.now(), ax, ay, az });
+      try { chan.send(msg); pkt++; } catch {}
+      const dt = (now - t0) / 1000; if (dt > 0.33) { hzEl.textContent = (pkt/dt).toFixed(0); pkt=0; t0=now; }
+    }, { passive:true });
+  }
+
+  // Auto-start where possible; otherwise show button for iOS
+  (async () => {
+    await ensurePermissionIfNeeded();
+    startStreaming();
+  })();
+</script>
+</body>
+</html>
