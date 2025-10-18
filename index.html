@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Phone → Web Accelerometer (One-File)</title>
+<title>Phone → Web Accelerometer (Single File, Robust)</title>
 <link rel="icon" href="data:;base64,=">
 <style>
   :root { --bg:#0b0c0f; --fg:#f2f5f7; --mut:#8ea0b3; --card:#141821 }
@@ -16,9 +16,12 @@
   .pill{display:inline-flex;gap:8px;align-items:center;border:1px solid #222b36;border-radius:999px;padding:6px 10px}
   canvas{background:#0f131b;border-radius:10px}
   button{appearance:none;border:1px solid #394658;background:#0f131b;color:var(--fg);padding:12px 14px;border-radius:12px;font-weight:600}
+  #err{white-space:pre-wrap}
 </style>
 </head>
 <body>
+
+<!-- HOST UI -->
 <div class="wrap" id="hostUI" style="display:none">
   <div class="row">
     <div class="card">
@@ -30,17 +33,19 @@
       <div class="pill">Peer: <span id="peerState" class="bad">disconnected</span></div>
       <div class="pill" style="margin-top:8px">Packets: <span id="pkt">0</span></div>
       <div class="mut" id="fbStatus" style="margin-top:10px"></div>
+      <div id="err" class="bad" style="margin-top:10px"></div>
     </div>
     <div class="card">
       <h2 style="margin:0 0 10px">Accelerometer (m/s²)</h2>
       <canvas id="chart" height="180"></canvas>
       <div class="mut" style="margin-top:10px">
-        Open this URL on your laptop. Scan the QR with your phone. On iOS tap “Enable Motion” once.
+        Open on your laptop. Scan the QR with your phone. On iOS, tap “Enable Motion” once.
       </div>
     </div>
   </div>
 </div>
 
+<!-- PHONE UI -->
 <div class="wrap" id="phoneUI" style="display:none;max-width:640px">
   <div class="card">
     <h2 style="margin:0 0 8px">Phone Sender</h2>
@@ -49,6 +54,7 @@
     <div class="pill">Channel: <span id="chanState" class="bad">connecting…</span></div>
     <div class="pill" style="margin-top:8px">Hz: <span id="hz">0</span></div>
     <div class="mut" id="fbStatusPhone" style="margin-top:10px"></div>
+    <div id="errPhone" class="bad" style="margin-top:10px"></div>
   </div>
   <div class="card">
     <button id="permBtn" style="display:none;width:100%">Enable Motion (iOS)</button>
@@ -61,13 +67,23 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
 <script type="module">
-/* -------- role detection -------- */
+/* ===== BASIC ERROR SURFACING (prevents blank screens) ===== */
+window.addEventListener('error', (e)=>{
+  const el = document.getElementById('err') || document.getElementById('errPhone');
+  if(el) el.textContent = "JS error: " + e.message;
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  const el = document.getElementById('err') || document.getElementById('errPhone');
+  if(el) el.textContent = "Promise rejection: " + (e.reason?.message || String(e.reason));
+});
+
+/* ===== ROLE DETECTION ===== */
 const params = new URLSearchParams(location.search);
 const sidParam = params.get("sid");
 const isLikelyMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-/* -------- Firebase config (ONE PLACE) -------- */
-// <-- PASTE YOUR FIREBASE CONFIG HERE -->
+/* ===== FIREBASE CONFIG (ONE PLACE) ===== */
+// PASTE your Firebase web app config here (EXACTLY).
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -77,63 +93,69 @@ const firebaseConfig = {
   messagingSenderId: "SENDER_ID",
   appId: "APP_ID"
 };
-// ---------------------------------
-
-const { initializeApp }  = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
-const { getDatabase, ref, onValue, set, push, remove }
-  = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js");
-
 function mustHaveConfig(){
-  if (!firebaseConfig?.apiKey || !firebaseConfig?.databaseURL) {
-    throw new Error("Firebase config missing. Fill in apiKey + databaseURL, etc.");
+  if(!firebaseConfig?.apiKey || !firebaseConfig?.databaseURL){
+    throw new Error("Firebase config missing or incomplete.");
   }
 }
 
-/* ===========================================================
-   HOST MODE (desktop, no ?sid)
-=========================================================== */
+/* ===== UTIL ===== */
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+function setText(id, s){ const el = document.getElementById(id); if(el) el.textContent = s; }
+
+/* ========================= HOST MODE ========================= */
 async function runHost(){
+  // Show UI immediately (so no blank screen)
   document.getElementById("hostUI").style.display = "";
-  const fbMsg = (s)=>document.getElementById("fbStatus").textContent = s;
 
-  // 1) session + QR shown immediately
+  // 1) Session + QR FIRST (even if Firebase fails)
   const sessionId = crypto.getRandomValues(new Uint32Array(2)).join("-");
-  document.getElementById("sess").textContent = sessionId;
-
+  setText("sess", sessionId);
   const basePath = location.pathname.replace(/[^/]*$/, ''); // keep trailing slash
   const phoneURL = `${location.origin}${basePath}?sid=${encodeURIComponent(sessionId)}`;
-  QRCode.toCanvas(document.getElementById("qrcanvas"), phoneURL, { width: 300 });
+  try {
+    QRCode.toCanvas(document.getElementById("qrcanvas"), phoneURL, { width: 300 });
+  } catch(e){
+    setText("err", "QR render failed: " + e.message);
+  }
 
-  // 2) Chart.js
-  const labels=[], X=[], Y=[], Z[], L=300;
-  const chart = new Chart(document.getElementById("chart"), {
-    type:"line",
-    data:{ labels, datasets:[
-      {label:"ax", data:X, borderWidth:1, pointRadius:0},
-      {label:"ay", data:Y, borderWidth:1, pointRadius:0},
-      {label:"az", data:Z, borderWidth:1, pointRadius:0},
-    ]},
-    options:{
-      animation:false,
-      interaction:{intersect:false, mode:"nearest"},
-      scales:{ x:{ticks:{display:false},grid:{display:false}},
-               y:{ suggestedMin:-20, suggestedMax:20 } },
-      plugins:{ legend:{ labels:{usePointStyle:true} } }
-    }
-  });
+  // 2) Chart (set up even if signaling fails)
+  const labels=[], X=[], Y=[], Z=[], L=300;
+  let chart;
+  try{
+    chart = new Chart(document.getElementById("chart"), {
+      type:"line",
+      data:{ labels, datasets:[
+        {label:"ax", data:X, borderWidth:1, pointRadius:0},
+        {label:"ay", data:Y, borderWidth:1, pointRadius:0},
+        {label:"az", data:Z, borderWidth:1, pointRadius:0},
+      ]},
+      options:{
+        animation:false,
+        interaction:{intersect:false, mode:"nearest"},
+        scales:{ x:{ticks:{display:false},grid:{display:false}},
+                 y:{ suggestedMin:-20, suggestedMax:20 } },
+        plugins:{ legend:{ labels:{usePointStyle:true} } }
+      }
+    });
+  }catch(e){ setText("err", "Chart init failed: " + e.message); }
   function addPoint(t, ax, ay, az){
     labels.push(new Date(t).toLocaleTimeString());
     X.push(ax); Y.push(ay); Z.push(az);
     if(labels.length>L){ labels.shift(); X.shift(); Y.shift(); Z.shift(); }
-    chart.update();
+    chart?.update();
   }
 
-  // 3) WebRTC + Firebase signaling
+  // 3) Signaling + WebRTC (guarded)
   try {
     mustHaveConfig();
+    const { initializeApp }  = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
+    const { getDatabase, ref, onValue, set, push, remove }
+      = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js");
+
     const app = initializeApp(firebaseConfig);
     const db  = getDatabase(app);
-    fbMsg("Firebase ready.");
+    setText("fbStatus", "Firebase ready.");
 
     const peerStateEl = document.getElementById("peerState");
     const pktEl = document.getElementById("pkt"); let pkt=0;
@@ -173,19 +195,17 @@ async function runHost(){
 
     addEventListener("beforeunload", ()=> remove(ref(db, `sessions/${sessionId}`)));
 
-  } catch (err){
-    console.error(err);
-    fbMsg("Signaling not active. Check Firebase config / databaseURL.");
+  } catch (e){
+    console.error(e);
+    setText("err", (e && e.message) ? e.message : String(e));
+    setText("fbStatus", "Signaling inactive. Check Firebase apiKey/databaseURL & Realtime Database.");
   }
 }
 
-/* ===========================================================
-   PHONE MODE (mobile or any device with ?sid=...)
-=========================================================== */
+/* ========================= PHONE MODE ========================= */
 async function runPhone(sessionId){
   document.getElementById("phoneUI").style.display = "";
-  const fbMsg = (s)=>document.getElementById("fbStatusPhone").textContent = s;
-  document.getElementById("sidLabel").textContent = sessionId;
+  setText("sidLabel", sessionId || "missing");
 
   // iOS motion permission (shown only if required)
   const btn = document.getElementById("permBtn");
@@ -202,11 +222,20 @@ async function runPhone(sessionId){
     }
   }
 
+  if (!sessionId) {
+    setText("errPhone", "No session id in URL. Open this page on a laptop first and scan the QR.");
+    return;
+  }
+
   try {
     mustHaveConfig();
+    const { initializeApp }  = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
+    const { getDatabase, ref, onValue, push, set, remove }
+      = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js");
+
     const app = initializeApp(firebaseConfig);
     const db  = getDatabase(app);
-    fbMsg("Firebase ready.");
+    setText("fbStatusPhone", "Firebase ready.");
 
     const stateEl = document.getElementById("chanState");
     const hzEl = document.getElementById("hz"); let pkt=0, t0=performance.now();
@@ -254,28 +283,25 @@ async function runPhone(sessionId){
       const dt=(now-t0)/1000; if (dt>0.33) { hzEl.textContent=(pkt/dt|0).toString(); pkt=0; t0=now; }
     }, { passive:true });
 
-    // Keep screen awake on phones that support it (optional)
     if ('wakeLock' in navigator) {
       try { await navigator.wakeLock.request('screen'); } catch {}
     }
 
     addEventListener("beforeunload", ()=> remove(ref(db, `sessions/${sessionId}`)));
 
-  } catch (err){
-    console.error(err);
-    fbMsg("Signaling not active. Check Firebase config / databaseURL.");
+  } catch (e){
+    console.error(e);
+    setText("errPhone", (e && e.message) ? e.message : String(e));
+    setText("fbStatusPhone", "Signaling inactive. Check Firebase apiKey/databaseURL & Realtime Database.");
   }
 }
 
-/* -------- bootstrap -------- */
+/* ===== BOOTSTRAP (never blank) ===== */
 if (sidParam || isLikelyMobile) {
-  // If a ?sid is present we *force* phone mode (works on any device).
-  // If no ?sid but it's mobile, user likely opened directly — show phone UI but it needs a sid.
+  // If sid present → phone mode on any device
   if (!sidParam && isLikelyMobile) {
-    // Help text if they opened on phone without scanning
     document.getElementById("phoneUI").style.display = "";
-    document.getElementById("fbStatusPhone").textContent =
-      "No session id in URL. Open this page on a laptop first and scan the QR.";
+    setText("fbStatusPhone", "No session id. Open on a laptop first and scan the QR.");
   } else {
     await runPhone(sidParam);
   }
