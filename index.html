@@ -124,6 +124,16 @@
             font-size: 1.2em;
             font-weight: bold;
         }
+        .debug {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 0.85em;
+            font-family: monospace;
+            max-height: 100px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -131,7 +141,7 @@
         <div class="card" id="desktopCard">
             <h1>📱 Accelerometer Live Stream</h1>
             <p>Scan this QR code with your iPhone to start streaming accelerometer data</p>
-            <div class="status" id="status">Ready - No signup required!</div>
+            <div class="status" id="status">Ready</div>
             <div class="session-id" id="sessionId">Loading...</div>
             <div id="qrcode"></div>
             <div class="instructions">
@@ -141,9 +151,10 @@
                     <li>Tap the notification to open the link</li>
                     <li>Grant accelerometer permission when prompted</li>
                     <li>Click "Start Streaming" on your phone</li>
-                    <li>Data streams through a free public relay service!</li>
+                    <li>Data will appear here in real-time!</li>
                 </ol>
             </div>
+            <div class="debug" id="debugLog">Debug: Ready...</div>
         </div>
 
         <div class="card" id="mobileCard">
@@ -152,8 +163,10 @@
             <button id="startBtn">Start Streaming</button>
             <button id="stopBtn" disabled>Stop Streaming</button>
             <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                Sent: <span id="sentCount">0</span> packets
+                Sent: <span id="sentCount">0</span> packets | 
+                Rate: <span id="sendRate">0</span>/sec
             </p>
+            <div class="debug" id="debugLogMobile">Debug: Ready...</div>
         </div>
 
         <div class="card">
@@ -179,15 +192,18 @@
     </div>
 
     <script>
-        // Using a free public WebSocket relay service
-        const WS_SERVER = 'wss://socketsbay.com/wss/v2/1/demo/';
+        // Using jsonbin.io free API for data relay
+        const API_KEY = '$2a$10$8fW8P9qvPxKzJ4xN0vP0eOYQYqHZJ7KzJ4xN0vP0eOYQYqHZJ7K';
+        const BIN_URL = 'https://api.jsonbin.io/v3/b';
         
-        let ws = null;
+        let binId = null;
         let sessionId = null;
         let isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         let streaming = false;
         let sentCount = 0;
-        let reconnectAttempts = 0;
+        let sendRate = 0;
+        let lastSecond = 0;
+        let thisSecondCount = 0;
         
         // Data storage for chart
         const maxDataPoints = 100;
@@ -197,6 +213,14 @@
             y: [],
             z: []
         };
+
+        function debugLog(msg) {
+            console.log(msg);
+            const debugEl = document.getElementById('debugLog') || document.getElementById('debugLogMobile');
+            if (debugEl) {
+                debugEl.textContent = msg + '\n' + debugEl.textContent.split('\n').slice(0, 5).join('\n');
+            }
+        }
 
         // Initialize Chart
         const ctx = document.getElementById('chart').getContext('2d');
@@ -248,7 +272,6 @@
             document.getElementById('yValue').textContent = y.toFixed(2);
             document.getElementById('zValue').textContent = z.toFixed(2);
 
-            // Update chart
             const timestamp = new Date().toLocaleTimeString();
             chartData.labels.push(timestamp);
             chartData.x.push(x);
@@ -272,112 +295,104 @@
         // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const urlSessionId = urlParams.get('session');
+        const urlBinId = urlParams.get('bin');
 
         // Show/hide appropriate UI
         if (urlSessionId) {
             sessionId = urlSessionId;
+            binId = urlBinId;
             document.getElementById('desktopCard').style.display = 'none';
             document.getElementById('mobileCard').style.display = 'block';
+            debugLog('Mobile mode - Session: ' + sessionId);
         } else {
             sessionId = generateSessionId();
             document.getElementById('desktopCard').style.display = 'block';
             document.getElementById('mobileCard').style.display = 'none';
             
-            const url = window.location.href.split('?')[0] + '?session=' + sessionId;
-            document.getElementById('sessionId').textContent = 'Session: ' + sessionId;
-            
-            setTimeout(() => {
-                try {
-                    new QRCode(document.getElementById('qrcode'), {
-                        text: url,
-                        width: 256,
-                        height: 256,
-                        colorDark: '#000000',
-                        colorLight: '#ffffff'
-                    });
-                } catch (e) {
-                    console.error('QR generation error:', e);
-                }
-            }, 100);
-        }
-
-        // WebSocket connection
-        function connectWebSocket() {
-            try {
-                ws = new WebSocket(WS_SERVER);
+            // Create a new bin for this session
+            debugLog('Creating data bin...');
+            fetch(BIN_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': API_KEY
+                },
+                body: JSON.stringify({
+                    session: sessionId,
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    timestamp: Date.now()
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                binId = data.metadata.id;
+                debugLog('Bin created: ' + binId);
                 
-                ws.onopen = () => {
-                    console.log('Connected to relay server');
-                    reconnectAttempts = 0;
-                    
-                    // Join session channel
-                    ws.send(JSON.stringify({
-                        type: 'join',
-                        session: sessionId
-                    }));
-
-                    if (urlSessionId) {
-                        document.getElementById('mobileStatus').textContent = 'Connected to relay';
-                        document.getElementById('mobileStatus').className = 'status connected';
-                    } else {
-                        document.getElementById('status').textContent = 'Connected - Waiting for phone...';
-                        document.getElementById('status').className = 'status waiting';
-                    }
-                };
-
-                ws.onmessage = (event) => {
+                const url = window.location.href.split('?')[0] + '?session=' + sessionId + '&bin=' + binId;
+                document.getElementById('sessionId').textContent = 'Session: ' + sessionId;
+                
+                setTimeout(() => {
                     try {
-                        const msg = JSON.parse(event.data);
+                        new QRCode(document.getElementById('qrcode'), {
+                            text: url,
+                            width: 256,
+                            height: 256,
+                            colorDark: '#000000',
+                            colorLight: '#ffffff'
+                        });
+                        debugLog('QR code generated');
+                        document.getElementById('status').textContent = 'Ready - Scan QR code';
+                        document.getElementById('status').className = 'status waiting';
                         
-                        if (msg.type === 'accel' && msg.session === sessionId) {
-                            updateDisplay(msg.x, msg.y, msg.z);
-                            
-                            if (!urlSessionId) {
-                                document.getElementById('status').textContent = 'Receiving Data ✓';
-                                document.getElementById('status').className = 'status connected';
-                            }
-                        }
+                        // Start polling for data
+                        startPolling();
                     } catch (e) {
-                        console.error('Message parse error:', e);
+                        debugLog('QR error: ' + e.message);
                     }
-                };
-
-                ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                };
-
-                ws.onclose = () => {
-                    console.log('Disconnected from relay');
-                    
-                    if (!urlSessionId) {
-                        document.getElementById('status').textContent = 'Disconnected - Reconnecting...';
-                        document.getElementById('status').className = 'status disconnected';
-                    }
-                    
-                    // Reconnect after delay
-                    if (reconnectAttempts < 10) {
-                        reconnectAttempts++;
-                        setTimeout(connectWebSocket, 2000);
-                    }
-                };
-            } catch (e) {
-                console.error('Connection error:', e);
-            }
+                }, 100);
+            })
+            .catch(err => {
+                debugLog('Bin creation error: ' + err.message);
+            });
         }
 
-        // Start connection
-        connectWebSocket();
+        function startPolling() {
+            setInterval(() => {
+                fetch(`${BIN_URL}/${binId}/latest`, {
+                    headers: {
+                        'X-Master-Key': API_KEY
+                    }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.record && data.record.timestamp) {
+                        updateDisplay(data.record.x, data.record.y, data.record.z);
+                        document.getElementById('status').textContent = 'Receiving Data ✓';
+                        document.getElementById('status').className = 'status connected';
+                        debugLog('Received: ' + data.record.x.toFixed(2) + ', ' + data.record.y.toFixed(2) + ', ' + data.record.z.toFixed(2));
+                    }
+                })
+                .catch(err => {
+                    debugLog('Poll error: ' + err.message);
+                });
+            }, 100); // Poll every 100ms
+        }
 
         if (urlSessionId) {
             // Phone: Send data
             document.getElementById('startBtn').onclick = async () => {
                 try {
                     if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                        debugLog('Requesting permission...');
                         const permission = await DeviceMotionEvent.requestPermission();
                         if (permission !== 'granted') {
                             alert('Permission denied for motion sensors');
+                            debugLog('Permission denied');
                             return;
                         }
+                        debugLog('Permission granted');
                     }
 
                     streaming = true;
@@ -387,8 +402,10 @@
                     document.getElementById('stopBtn').disabled = false;
                     document.getElementById('mobileStatus').textContent = 'Streaming ✓';
                     document.getElementById('mobileStatus').className = 'status connected';
+                    debugLog('Streaming started');
                     
                 } catch (error) {
+                    debugLog('Error: ' + error.message);
                     alert('Error: ' + error.message);
                 }
             };
@@ -400,29 +417,53 @@
                 document.getElementById('stopBtn').disabled = true;
                 document.getElementById('mobileStatus').textContent = 'Stopped';
                 document.getElementById('mobileStatus').className = 'status disconnected';
+                debugLog('Streaming stopped');
             };
 
             let lastSent = 0;
             function handleMotion(event) {
                 const now = Date.now();
-                if (now - lastSent < 50) return; // Max 20 updates/sec
+                if (now - lastSent < 100) return; // Max 10 updates/sec to avoid rate limits
                 lastSent = now;
 
                 const acc = event.accelerationIncludingGravity;
-                if (acc && streaming && ws && ws.readyState === WebSocket.OPEN) {
+                if (acc && streaming && binId) {
                     const data = {
-                        type: 'accel',
                         session: sessionId,
                         x: acc.x || 0,
                         y: acc.y || 0,
-                        z: acc.z || 0
+                        z: acc.z || 0,
+                        timestamp: now
                     };
                     
-                    ws.send(JSON.stringify(data));
-                    sentCount++;
-                    document.getElementById('sentCount').textContent = sentCount;
-                    
-                    updateDisplay(data.x, data.y, data.z);
+                    // Update bin
+                    fetch(`${BIN_URL}/${binId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Master-Key': API_KEY
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(() => {
+                        sentCount++;
+                        document.getElementById('sentCount').textContent = sentCount;
+                        
+                        // Calculate rate
+                        const sec = Math.floor(now / 1000);
+                        if (sec !== lastSecond) {
+                            sendRate = thisSecondCount;
+                            document.getElementById('sendRate').textContent = sendRate;
+                            thisSecondCount = 0;
+                            lastSecond = sec;
+                        }
+                        thisSecondCount++;
+                        
+                        updateDisplay(data.x, data.y, data.z);
+                    })
+                    .catch(err => {
+                        debugLog('Send error: ' + err.message);
+                    });
                 }
             }
         }
