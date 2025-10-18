@@ -1,404 +1,449 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Accelerometer Live Stream</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .card {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-        h1 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 2em;
-        }
-        .status {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            margin: 10px 0;
-        }
-        .status.disconnected {
-            background: #fee;
-            color: #c33;
-        }
-        .status.connected {
-            background: #efe;
-            color: #3c3;
-        }
-        .status.waiting {
-            background: #ffeaa7;
-            color: #d63031;
-        }
-        #qrcode {
-            display: inline-block;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            margin: 20px 0;
-        }
-        .data-display {
-            display: flex;
-            gap: 10px;
-            margin: 10px 0;
-            font-size: 0.75em;
-        }
-        .data-item {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
-            text-align: center;
-        }
-        .data-item label {
-            display: inline;
-            font-size: 0.9em;
-            opacity: 0.9;
-            margin-right: 5px;
-        }
-        .data-item .value {
-            display: inline;
-            font-size: 1.1em;
-            font-weight: bold;
-        }
-        .chart-container {
-            position: relative;
-            height: 400px;
-            margin-top: 20px;
-        }
-        button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 1em;
-            cursor: pointer;
-            margin: 5px;
-            transition: transform 0.2s;
-        }
-        button:hover {
-            transform: scale(1.05);
-        }
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .instructions {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 15px 0;
-            border-left: 4px solid #667eea;
-        }
-        .session-id {
-            font-family: monospace;
-            background: #f0f0f0;
-            padding: 8px 12px;
-            border-radius: 5px;
-            display: inline-block;
-            margin: 10px 0;
-            font-size: 1.2em;
-            font-weight: bold;
-        }
-    </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Live Motion → Sound Remix</title>
+<style>
+  :root {
+    --bg:#0b0b0c; --fg:#e9e9ee; --mut:#9aa0a6; --acc:#5dd4ff; --warn:#ff6b6b;
+    --colR:320px; --track:#40424a; --fill:#e9e9ee;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0b0b0c,#14141a);color:var(--fg);font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial}
+  .wrap{display:grid;grid-template-columns:minmax(0,1fr) var(--colR);gap:14px;height:100vh;padding:12px}
+  main{min-width:0;display:flex;align-items:center;justify-content:center}
+  .stage{position:relative;width:100%;height:100%;aspect-ratio:16/9;border:1px solid #1f2026;border-radius:14px;overflow:hidden;background:#000}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #heat{mix-blend-mode:screen}
+  .hud{
+    position:absolute;left:10px;bottom:10px;background:rgba(0,0,0,.55);
+    padding:6px 10px;border:1px solid #2a2b33;border-radius:10px;font:12px ui-monospace;color:#cfd3dc
+  }
+  .nosrc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9297a3;font:12px ui-monospace}
+  aside{overflow:auto;padding-right:8px}
+  h2{margin:10px 0 6px;font-size:12px;color:#cbd0da;letter-spacing:.06em;text-transform:uppercase}
+  .row{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:center;margin:6px 0}
+  .row>label{color:#cbd0da}
+  input[type="range"]{appearance:none;height:2px;background:linear-gradient(90deg,var(--fill) 0 var(--p,0%),var(--track) var(--p,0%) 100%)}
+  input[type="range"]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;background:#fff;border:1px solid #111;border-radius:0}
+  input[type="file"]{width:100%}
+  .btn{appearance:none;background:#17181e;color:#fff;border:1px solid #2c2d36;padding:6px 10px;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .mut{color:var(--mut)}
+  .pill{display:inline-block;padding:2px 6px;border:1px solid #32333c;border-radius:999px;font:11px ui-monospace;color:#cfd3dc}
+  .note{font-size:12px;color:#9aa0a6}
+  .warn{color:var(--warn)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="card" id="desktopCard">
-            <h1>📱 Accelerometer Live Stream</h1>
-            <p>Scan this QR code with your iPhone to start streaming accelerometer data</p>
-            <div class="status" id="status">Initializing...</div>
-            <div class="session-id" id="sessionId">Connecting...</div>
-            <div id="qrcode"></div>
-            <div class="instructions">
-                <strong>Instructions:</strong>
-                <ol style="margin-left: 20px; margin-top: 10px;">
-                    <li>Wait for the QR code to appear (takes a few seconds)</li>
-                    <li>Open your iPhone camera and scan the QR code</li>
-                    <li>Tap the notification to open the link</li>
-                    <li>Click "Start Streaming" on your phone</li>
-                    <li>Grant accelerometer permission when prompted</li>
-                    <li>Data will stream to this page in real-time!</li>
-                </ol>
-            </div>
-        </div>
+<div class="wrap">
+  <main>
+    <div class="stage">
+      <canvas id="heat"></canvas>
+      <div id="nosrc" class="nosrc">Click <b>Start Camera</b> (HTTPS required)</div>
+      <div id="hud" class="hud">motion: 0.00 • fps: —</div>
+    </div>
+  </main>
 
-        <div class="card" id="mobileCard">
-            <h1>📱 Sensor Control</h1>
-            <div class="status" id="mobileStatus">Ready</div>
-            <button id="startBtn">Start Streaming</button>
-            <button id="stopBtn" disabled>Stop Streaming</button>
-            <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                Sent: <span id="sentCount">0</span> packets
-            </p>
-        </div>
+  <aside>
+    <h2>Camera</h2>
+    <div class="grid2" style="margin-bottom:6px">
+      <button id="startCam" class="btn">Start Camera</button>
+      <button id="stopCam" class="btn">Stop</button>
+    </div>
+    <div class="note" style="margin-bottom:10px">If this site isn’t on <b>https://</b> or <b>localhost</b>, your browser will block the camera.</div>
 
-        <div class="card">
-            <h2>Live Data</h2>
-            <div class="data-display">
-                <div class="data-item">
-                    <label>X:</label>
-                    <span class="value" id="xValue">0.00</span>
-                </div>
-                <div class="data-item">
-                    <label>Y:</label>
-                    <span class="value" id="yValue">0.00</span>
-                </div>
-                <div class="data-item">
-                    <label>Z:</label>
-                    <span class="value" id="zValue">0.00</span>
-                </div>
-            </div>
-            <div class="chart-container">
-                <canvas id="chart"></canvas>
-            </div>
-        </div>
+    <h2>Motion Extraction</h2>
+    <div class="row">
+      <label>Δt (s)</label>
+      <input id="dt" type="range" min="0.1" max="3" step="0.1" value="0.7">
+      <span id="dtV">0.7</span>
+    </div>
+    <div class="row">
+      <label>Threshold</label>
+      <input id="thr" type="range" min="8" max="80" step="1" value="28">
+      <span id="thrV">28</span>
+    </div>
+    <div class="row">
+      <label>Sensitivity</label>
+      <input id="sens" type="range" min="0.2" max="3" step="0.1" value="1.3">
+      <span id="sensV">1.3</span>
+    </div>
+    <div class="row">
+      <label>Blur (px)</label>
+      <input id="blur" type="range" min="0" max="3" step="1" value="1">
+      <span id="blurV">1</span>
+    </div>
+    <div class="row">
+      <label>Heat fade</label>
+      <input id="fade" type="range" min="0.80" max="0.995" step="0.001" value="0.93">
+      <span id="fadeV">0.93</span>
     </div>
 
-    <script>
-        // Your Pusher credentials
-        const PUSHER_KEY = '25a155be0089b6a98a4b';
-        const PUSHER_CLUSTER = 'us2';
-        
-        let pusher = null;
-        let channel = null;
-        let sessionId = null;
-        let isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        let streaming = false;
-        let sentCount = 0;
-        
-        // Data storage for chart
-        const maxDataPoints = 100;
-        const chartData = {
-            labels: [],
-            x: [],
-            y: [],
-            z: []
-        };
+    <h2>Audio</h2>
+    <div class="grid2" style="margin-bottom:6px">
+      <button id="audioOn" class="btn">Enable Audio</button>
+      <button id="mute" class="btn">Mute</button>
+    </div>
+    <div class="row">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="loop" selected>Loop Remix (load file)</option>
+        <option value="synth">Built-in Synth</option>
+      </select>
+      <span></span>
+    </div>
+    <div class="row" style="grid-template-columns:1fr 1fr auto">
+      <label>Load loop (WAV/MP3)</label>
+      <input id="file" type="file" accept="audio/*">
+      <span class="pill">optional</span>
+    </div>
+    <div class="row">
+      <label>Gain scale</label>
+      <input id="gainScale" type="range" min="0" max="2" step="0.05" value="1.0">
+      <span id="gainScaleV">1.00</span>
+    </div>
+    <div class="row">
+      <label>Rate range</label>
+      <input id="rateRange" type="range" min="0" max="1" step="0.01" value="0.35">
+      <span id="rateRangeV">0.35</span>
+    </div>
+    <div class="note">Mapping: more motion → louder, faster; less motion → quieter, slower. Crossfade keeps rhythm stable while rate changes.</div>
 
-        // Initialize Chart
-        const ctx = document.getElementById('chart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: chartData.labels,
-                datasets: [{
-                    label: 'X Axis',
-                    data: chartData.x,
-                    borderColor: '#e74c3c',
-                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                    tension: 0.4
-                }, {
-                    label: 'Y Axis',
-                    data: chartData.y,
-                    borderColor: '#3498db',
-                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                    tension: 0.4
-                }, {
-                    label: 'Z Axis',
-                    data: chartData.z,
-                    borderColor: '#2ecc71',
-                    backgroundColor: 'rgba(46, 204, 113, 0.1)',
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        min: -20,
-                        max: 20
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true
-                    }
-                }
+    <h2>Export Still</h2>
+    <div class="grid2">
+      <button id="savePng" class="btn">Save PNG</button>
+      <span class="mut">Heatmap only</span>
+    </div>
+  </aside>
+</div>
+
+<!-- Hidden video + working canvases -->
+<video id="vid" playsinline muted style="display:none"></video>
+<canvas id="workA" style="display:none"></canvas>
+<canvas id="workB" style="display:none"></canvas>
+
+<script>
+(function(){
+  // --- DOM shortcuts
+  const $ = id => document.getElementById(id);
+  const vid = $('vid');
+  const canHeat = $('heat'); const hctx = canHeat.getContext('2d', {willReadFrequently:true});
+  const workA = $('workA'), wA = workA.getContext('2d', {willReadFrequently:true});
+  const workB = $('workB'), wB = workB.getContext('2d', {willReadFrequently:true});
+  const nosrc = $('nosrc'), hud = $('hud');
+
+  const ui = {
+    startCam:$('startCam'), stopCam:$('stopCam'),
+    dt:$('dt'), dtV:$('dtV'),
+    thr:$('thr'), thrV:$('thrV'),
+    sens:$('sens'), sensV:$('sensV'),
+    blur:$('blur'), blurV:$('blurV'),
+    fade:$('fade'), fadeV:$('fadeV'),
+    audioOn:$('audioOn'), mute:$('mute'),
+    mode:$('mode'),
+    file:$('file'),
+    gainScale:$('gainScale'), gainScaleV:$('gainScaleV'),
+    rateRange:$('rateRange'), rateRangeV:$('rateRangeV'),
+    savePng:$('savePng')
+  };
+
+  // --- Sizing
+  function fit(){
+    const r = canHeat.getBoundingClientRect();
+    const dpr = Math.max(1, window.devicePixelRatio||1);
+    const W = Math.max(2, Math.floor(r.width * dpr));
+    const H = Math.max(2, Math.floor(r.height * dpr));
+    [canHeat, workA, workB].forEach(c=>{ c.width=W; c.height=H; });
+  }
+  new ResizeObserver(fit).observe(canHeat); fit();
+
+  // --- Camera
+  let stream=null;
+  ui.startCam.onclick = async ()=>{
+    const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
+    if(!secure){ alert('Camera requires HTTPS or localhost.'); return; }
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        video:{ width:{ideal:1280}, height:{ideal:720}, facingMode:{ideal:'environment'} }, audio:false
+      });
+      vid.srcObject = stream;
+      await vid.play();
+      nosrc.style.display='none';
+    }catch(e){
+      alert('Camera error: '+(e && e.message ? e.message : e));
+    }
+  };
+  ui.stopCam.onclick = ()=>{ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } vid.pause(); nosrc.style.display='flex'; };
+
+  // --- Controls
+  function syncVal(r, out){ out.textContent = (r.step && r.step.indexOf('.')>-1) ? (+r.value).toFixed(r.step.split('.')[1].length) : r.value; r.style.setProperty('--p', ((+r.value-(+r.min||0))/((+r.max||100)-(+r.min||0)))*100 + '%'); }
+  ['dt','thr','sens','blur','fade','gainScale','rateRange'].forEach(id=>{
+    const r = ui[id], v = ui[id+'V']; syncVal(r,v); r.addEventListener('input', ()=>syncVal(r,v));
+  });
+
+  // --- Motion core
+  const state = {
+    lastStamp: 0,
+    lastFrame: null,
+    accum: 0,
+    motionEMA: 0,
+    fpsEMA: 0
+  };
+
+  function drawVideo(ctx, W, H, blurPx){
+    ctx.save();
+    if(blurPx>0) ctx.filter=`blur(${blurPx}px)`;
+    const vw = vid.videoWidth|0, vh = vid.videoHeight|0;
+    if(vw && vh){
+      const s = Math.min(W/vw, H/vh);
+      const dw = Math.round(vw*s), dh = Math.round(vh*s);
+      const dx = (W-dw)>>1, dy = (H-dh)>>1;
+      ctx.drawImage(vid, dx, dy, dw, dh);
+    }
+    ctx.restore();
+  }
+
+  // --- Audio (Web Audio)
+  let AC=null, master=null, comp=null, lp=null, loopBuf=null;
+  let loopA=null, loopB=null, loopStart=0, loopDur=0, loopPlaying=false;
+  let muted=false;
+
+  function ensureAudio(){
+    if(AC) return;
+    AC = new (window.AudioContext||window.webkitAudioContext)();
+    comp = AC.createDynamicsCompressor();
+    lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=18000;
+    master = AC.createGain(); master.gain.value=0.0;
+    comp.connect(lp).connect(master).connect(AC.destination);
+  }
+
+  ui.audioOn.onclick = async ()=>{
+    ensureAudio();
+    try{ await AC.resume(); }catch(_){}
+  };
+  ui.mute.onclick = ()=>{
+    muted = !muted;
+    ui.mute.textContent = muted ? 'Unmute' : 'Mute';
+    if(master) master.gain.value = muted ? 0 : master.gain.value;
+  };
+
+  // Load loop
+  ui.file.addEventListener('change', async (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    ensureAudio();
+    const arr = await f.arrayBuffer();
+    loopBuf = await AC.decodeAudioData(arr);
+    loopDur = loopBuf.duration;
+    startLoopRemix();
+  });
+
+  function stopLoops(){
+    [loopA, loopB].forEach(s=>{ try{ s && s.stop(); }catch(_){}} );
+    loopA=loopB=null; loopPlaying=false;
+  }
+
+  function startLoopRemix(){
+    if(!AC || !loopBuf) return;
+    stopLoops();
+    // Two staggered players → crossfade + rate warp
+    loopA = AC.createBufferSource(); loopA.buffer = loopBuf; loopA.loop = true;
+    loopB = AC.createBufferSource(); loopB.buffer = loopBuf; loopB.loop = true;
+
+    const gA = AC.createGain(), gB = AC.createGain();
+    gA.gain.value = 1; gB.gain.value = 0;
+
+    loopA.connect(gA).connect(comp);
+    loopB.connect(gB).connect(comp);
+
+    loopStart = AC.currentTime + 0.05;
+    const offsetB = loopDur/2; // half-cycle offset for textured crossfade
+    loopA.start(loopStart);
+    loopB.start(loopStart, offsetB % loopDur);
+    loopPlaying = true;
+
+    // store for mod
+    loopA._gain = gA; loopB._gain = gB;
+  }
+
+  // Built-in synth fallback
+  let synth = null;
+  function ensureSynth(){
+    ensureAudio();
+    if(synth) return synth;
+    const g = AC.createGain(); g.gain.value = 0.0;
+    g.connect(comp);
+    synth = {
+      g,
+      tickKick(){
+        const o = AC.createOscillator();
+        const og = AC.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(120, AC.currentTime);
+        o.frequency.exponentialRampToValueAtTime(40, AC.currentTime+0.12);
+        og.gain.setValueAtTime(0.8, AC.currentTime);
+        og.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+0.14);
+        o.connect(og).connect(g); o.start(); o.stop(AC.currentTime+0.16);
+      },
+      tickNoise(){
+        const buf = AC.createBuffer(1, AC.sampleRate*0.12, AC.sampleRate);
+        const data = buf.getChannelData(0);
+        for(let i=0;i<data.length;i++) data[i] = (Math.random()*2-1)*0.7;
+        const src = AC.createBufferSource(); src.buffer = buf;
+        const sh = AC.createBiquadFilter(); sh.type='highpass'; sh.frequency.value=4000;
+        const eg = AC.createGain();
+        eg.gain.value = 0.6;
+        eg.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+0.12);
+        src.connect(sh).connect(eg).connect(g); src.start(); src.stop(AC.currentTime+0.13);
+      },
+      tone(level){
+        const o = AC.createOscillator(); o.type='triangle';
+        const eg = AC.createGain(); eg.gain.value = Math.min(0.2, 0.02 + 0.18*level);
+        o.frequency.value = 220 + 660*level;
+        o.connect(eg).connect(g);
+        o.start(); o.stop(AC.currentTime + 0.08 + 0.25*level);
+      }
+    };
+    return synth;
+  }
+
+  // --- Mapping motion → audio params
+  function applyAudioFromMotion(m){
+    if(!AC) return;
+    // Smooth motion (already EMAed), clamp 0..1
+    const motion = Math.max(0, Math.min(1, m));
+    const gainScale = +ui.gainScale.value;          // 0..2
+    const rateRange = +ui.rateRange.value;          // 0..1 → range of playbackRate warp
+
+    // Master gain target
+    const targetGain = muted ? 0 : Math.min(1.0, motion * (0.7*gainScale));
+    if(master){
+      master.gain.cancelScheduledValues(AC.currentTime);
+      master.gain.linearRampToValueAtTime(targetGain, AC.currentTime + 0.05);
+    }
+
+    // Gentle LP filter opening with motion
+    const freq = 400 + motion * 18000;
+    if(lp){
+      lp.frequency.cancelScheduledValues(AC.currentTime);
+      lp.frequency.linearRampToValueAtTime(freq, AC.currentTime + 0.06);
+    }
+
+    if(ui.mode.value === 'loop'){
+      if(loopBuf && !loopPlaying) startLoopRemix();
+      if(loopA && loopB){
+        // Crossfade based on motion (adds texture without huge volume spikes)
+        const x = motion;
+        const a = Math.cos(x * Math.PI * 0.5); // equal-power crossfade
+        const b = Math.sin(x * Math.PI * 0.5);
+        loopA._gain.gain.linearRampToValueAtTime(a, AC.currentTime + 0.05);
+        loopB._gain.gain.linearRampToValueAtTime(b, AC.currentTime + 0.05);
+
+        const base = 1.0;
+        const pr = base + (motion*2-1) * rateRange; // e.g. 1 ± range
+        loopA.playbackRate.value = Math.max(0.5, Math.min(2.0, pr));
+        loopB.playbackRate.value = Math.max(0.5, Math.min(2.0, 2-pr)); // slight counter-warp
+      }
+    } else {
+      // Synth pulses driven by motion magnitude as tempo
+      const s = ensureSynth();
+      const tempo = 40 + motion*140; // BPM
+      const period = 60/tempo;
+      // Schedule sparse hits: kick on beat, noise on upbeat, a short tone with level
+      if(!applyAudioFromMotion._next || AC.currentTime >= applyAudioFromMotion._next){
+        s.tickKick();
+        setTimeout(()=>s.tickNoise(), period*500);
+        s.tone(motion);
+        applyAudioFromMotion._next = AC.currentTime + period;
+      }
+      s.g.gain.linearRampToValueAtTime(muted ? 0 : Math.min(0.8, 0.4*gainScale), AC.currentTime+0.05);
+    }
+  }
+
+  // --- Render loop
+  let lastT = performance.now();
+  function loop(now){
+    requestAnimationFrame(loop);
+
+    const W = canHeat.width, H = canHeat.height;
+    if(!W || !H) return;
+
+    // Clear & gently fade previous heat
+    const fade = 1 - Math.max(0.80, Math.min(0.995, +ui.fade.value));
+    hctx.globalCompositeOperation = 'destination-out';
+    hctx.fillStyle = `rgba(0,0,0,${fade})`;
+    hctx.fillRect(0,0,W,H);
+    hctx.globalCompositeOperation = 'source-over';
+
+    if(vid.readyState >= 2){
+      // Δt buffering: draw two frames spaced apart in time
+      // We approximate by: current frame in workA; previous cached ImageData in workB.
+      drawVideo(wA, W, H, +ui.blur.value);
+      const curr = wA.getImageData(0,0,W,H);
+
+      // Build/keep a circular buffer of past frames by time spacing
+      const want = Math.max(0.1, +ui.dt.value);
+      if(!state.lastFrame || (vid.currentTime - state.lastStamp) >= want){
+        // stamp current into lastFrame
+        state.lastFrame = curr;
+        state.lastStamp = vid.currentTime;
+      }
+
+      const prev = state.lastFrame;
+      if(prev){
+        const thr = +ui.thr.value;
+        const sens = +ui.sens.value;
+        const cd = curr.data, pd = prev.data;
+        // Heatmap pass (cheap): write red intensity per pixel where |Δluma| > thr
+        const step = 4;
+        let changed = 0;
+        const rowSkip = 1, colSkip = 1; // set >1 to decimate for speed
+        for(let y=0; y<H; y+=rowSkip){
+          for(let x=0; x<W; x+=colSkip){
+            const i = (y*W + x) * 4;
+            const r=cd[i], g=cd[i+1], b=cd[i+2];
+            const pr=pd[i], pg=pd[i+1], pb=pd[i+2];
+            const l = r*0.2126 + g*0.7152 + b*0.0722;
+            const q = pr*0.2126 + pg*0.7152 + pb*0.0722;
+            const d = Math.abs(l - q);
+            if(d > thr){
+              changed++;
+              const a = Math.min(255, (d-thr) * (2.0 * sens));
+              hctx.fillStyle = `rgba(93,212,255,${Math.min(1, a/255)})`; // cyan heat
+              hctx.fillRect(x, y, 1, 1);
             }
-        });
-
-        function updateDisplay(x, y, z) {
-            document.getElementById('xValue').textContent = x.toFixed(2);
-            document.getElementById('yValue').textContent = y.toFixed(2);
-            document.getElementById('zValue').textContent = z.toFixed(2);
-
-            // Update chart
-            const timestamp = new Date().toLocaleTimeString();
-            chartData.labels.push(timestamp);
-            chartData.x.push(x);
-            chartData.y.push(y);
-            chartData.z.push(z);
-
-            if (chartData.labels.length > maxDataPoints) {
-                chartData.labels.shift();
-                chartData.x.shift();
-                chartData.y.shift();
-                chartData.z.shift();
-            }
-
-            chart.update();
+          }
         }
+        // Normalize motion magnitude ~ fraction of pixels changed
+        const m = changed / (W*H/ (rowSkip*colSkip));
+        // EMA for stability
+        state.motionEMA = state.motionEMA*0.85 + Math.min(1, m*12)*0.15;
 
-        function generateSessionId() {
-            return 'accel-' + Math.random().toString(36).substr(2, 9);
-        }
+        // Audio mapping
+        applyAudioFromMotion(state.motionEMA);
+      }
+    }
 
-        // Get URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlSessionId = urlParams.get('session');
+    // HUD
+    const dt = now - lastT; lastT = now;
+    const inst = dt>0 ? 1000/dt : 0;
+    state.fpsEMA = state.fpsEMA ? state.fpsEMA*0.9 + inst*0.1 : inst;
+    hud.textContent = `motion: ${state.motionEMA.toFixed(2)} • fps: ${state.fpsEMA.toFixed(1)}`;
+  }
+  requestAnimationFrame(loop);
 
-        // Show/hide appropriate UI
-        if (urlSessionId) {
-            // Mobile view
-            sessionId = urlSessionId;
-            document.getElementById('desktopCard').style.display = 'none';
-            document.getElementById('mobileCard').style.display = 'block';
-        } else {
-            // Desktop view
-            sessionId = generateSessionId();
-            document.getElementById('desktopCard').style.display = 'block';
-            document.getElementById('mobileCard').style.display = 'none';
-            
-            // Generate QR code
-            const url = window.location.href.split('?')[0] + '?session=' + sessionId;
-            document.getElementById('sessionId').textContent = 'Session: ' + sessionId;
-            
-            setTimeout(() => {
-                try {
-                    new QRCode(document.getElementById('qrcode'), {
-                        text: url,
-                        width: 256,
-                        height: 256,
-                        colorDark: '#000000',
-                        colorLight: '#ffffff'
-                    });
-                } catch (e) {
-                    console.error('QR generation error:', e);
-                }
-            }, 100);
-        }
+  // --- Export still
+  ui.savePng.onclick = ()=>{
+    const a = document.createElement('a');
+    a.download = `motion_heat_${Date.now()}.png`;
+    a.href = canHeat.toDataURL('image/png');
+    a.click();
+  };
 
-        // Initialize Pusher
-        try {
-            pusher = new Pusher(PUSHER_KEY, {
-                cluster: PUSHER_CLUSTER
-            });
-
-            channel = pusher.subscribe(sessionId);
-
-            if (urlSessionId) {
-                // Phone: Send data
-                document.getElementById('startBtn').onclick = async () => {
-                    try {
-                        // Request permission for iPhone
-                        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                            console.log('Requesting motion permission...');
-                            const permission = await DeviceMotionEvent.requestPermission();
-                            console.log('Permission result:', permission);
-                            
-                            if (permission !== 'granted') {
-                                alert('Motion sensor permission denied. Please allow access in Settings.');
-                                return;
-                            }
-                        }
-
-                        streaming = true;
-                        window.addEventListener('devicemotion', handleMotion);
-                        
-                        document.getElementById('startBtn').disabled = true;
-                        document.getElementById('stopBtn').disabled = false;
-                        document.getElementById('mobileStatus').textContent = 'Streaming ✓';
-                        document.getElementById('mobileStatus').className = 'status connected';
-                        
-                        console.log('Streaming started');
-                        
-                    } catch (error) {
-                        console.error('Error:', error);
-                        alert('Error starting sensors: ' + error.message);
-                    }
-                };
-
-                document.getElementById('stopBtn').onclick = () => {
-                    streaming = false;
-                    window.removeEventListener('devicemotion', handleMotion);
-                    document.getElementById('startBtn').disabled = false;
-                    document.getElementById('stopBtn').disabled = true;
-                    document.getElementById('mobileStatus').textContent = 'Stopped';
-                    document.getElementById('mobileStatus').className = 'status disconnected';
-                    console.log('Streaming stopped');
-                };
-
-                // Throttle sending to avoid rate limits
-                let lastSent = 0;
-                function handleMotion(event) {
-                    const now = Date.now();
-                    if (now - lastSent < 100) return; // Max 10 updates/sec
-                    lastSent = now;
-
-                    const acc = event.accelerationIncludingGravity;
-                    if (acc && streaming) {
-                        const data = {
-                            x: acc.x || 0,
-                            y: acc.y || 0,
-                            z: acc.z || 0
-                        };
-                        
-                        console.log('Sending data:', data);
-                        
-                        // Trigger client event
-                        channel.trigger('client-accel-data', data);
-                        sentCount++;
-                        document.getElementById('sentCount').textContent = sentCount;
-                        
-                        // Also update own display
-                        updateDisplay(data.x, data.y, data.z);
-                    }
-                }
-            } else {
-                // Desktop: Receive data
-                channel.bind('client-accel-data', (data) => {
-                    console.log('Received data:', data);
-                    updateDisplay(data.x, data.y, data.z);
-                    document.getElementById('status').textContent = 'Receiving Data ✓';
-                    document.getElementById('status').className = 'status connected';
-                });
-
-                document.getElementById('status').textContent = 'Waiting for phone...';
-                document.getElementById('status').className = 'status waiting';
-            }
-        } catch (e) {
-            console.error('Pusher error:', e);
-            alert('Connection failed. Please check console for errors.');
-        }
-    </script>
+})();
+</script>
 </body>
 </html>
