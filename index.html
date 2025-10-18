@@ -62,26 +62,27 @@
             margin: 20px 0;
         }
         .data-display {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            font-size: 0.75em;
         }
         .data-item {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 20px;
-            border-radius: 15px;
+            padding: 8px 12px;
+            border-radius: 8px;
             text-align: center;
         }
         .data-item label {
-            display: block;
+            display: inline;
             font-size: 0.9em;
             opacity: 0.9;
-            margin-bottom: 5px;
+            margin-right: 5px;
         }
         .data-item .value {
-            font-size: 2em;
+            display: inline;
+            font-size: 1.1em;
             font-weight: bold;
         }
         .chart-container {
