@@ -3,139 +3,285 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>Accel Stream — Phone</title>
+<title>Phone → Web Accelerometer (One-File)</title>
 <link rel="icon" href="data:;base64,=">
 <style>
-  :root { --bg:#0b0c0f; --fg:#f2f5f7; --mut:#8e9aa7; --card:#141821; }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,Segoe UI,Arial}
-  .wrap{max-width:600px;margin:0 auto;padding:24px;display:grid;gap:16px}
-  .card{background:var(--card);border:1px solid #1e2530;border-radius:14px;padding:16px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
-  button{appearance:none;border:1px solid #394658;background:#0f131b;color:var(--fg);padding:12px 14px;border-radius:12px;font-weight:600;width:100%}
-  .mut{color:var(--mut)}
+  :root { --bg:#0b0c0f; --fg:#f2f5f7; --mut:#8ea0b3; --card:#141821 }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,Segoe UI,Arial}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px;display:grid;gap:16px}
+  .row{display:grid;gap:16px;grid-template-columns: 340px 1fr}
+  .card{background:var(--card);border:1px solid #1e2530;border-radius:14px;padding:16px}
+  .mut{color:var(--mut)} .ok{color:#21d07a} .bad{color:#ff6b6b}
+  .qr{display:flex;align-items:center;justify-content:center;aspect-ratio:1/1;background:#fff;border-radius:12px}
   .pill{display:inline-flex;gap:8px;align-items:center;border:1px solid #222b36;border-radius:999px;padding:6px 10px}
-  .ok{color:#4cd137}.bad{color:#ff6b6b}
+  canvas{background:#0f131b;border-radius:10px}
+  button{appearance:none;border:1px solid #394658;background:#0f131b;color:var(--fg);padding:12px 14px;border-radius:12px;font-weight:600}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <h2 style="margin:0 0 8px">Phone Sender</h2>
-    <div class="mut" id="sid"></div>
-    <div style="height:10px"></div>
-    <div class="pill">Channel: <span id="state" class="bad">connecting…</span></div>
-    <div class="pill" style="margin-top:8px">Hz: <span id="hz">0</span></div>
-  </div>
-  <div class="card">
-    <button id="startBtn" style="display:none">Enable Motion (iOS/Safari)</button>
-    <div class="mut">This page streams accelerometer data to the host. Keep it open and the screen on.</div>
+<div class="wrap" id="hostUI" style="display:none">
+  <div class="row">
+    <div class="card">
+      <h2 style="margin:0 0 8px">Session</h2>
+      <div class="mut">ID: <span id="sess">—</span></div>
+      <div style="height:10px"></div>
+      <div class="qr"><canvas id="qrcanvas"></canvas></div>
+      <div style="height:12px"></div>
+      <div class="pill">Peer: <span id="peerState" class="bad">disconnected</span></div>
+      <div class="pill" style="margin-top:8px">Packets: <span id="pkt">0</span></div>
+      <div class="mut" id="fbStatus" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2 style="margin:0 0 10px">Accelerometer (m/s²)</h2>
+      <canvas id="chart" height="180"></canvas>
+      <div class="mut" style="margin-top:10px">
+        Open this URL on your laptop. Scan the QR with your phone. On iOS tap “Enable Motion” once.
+      </div>
+    </div>
   </div>
 </div>
 
+<div class="wrap" id="phoneUI" style="display:none;max-width:640px">
+  <div class="card">
+    <h2 style="margin:0 0 8px">Phone Sender</h2>
+    <div class="mut">Session: <span id="sidLabel">—</span></div>
+    <div style="height:8px"></div>
+    <div class="pill">Channel: <span id="chanState" class="bad">connecting…</span></div>
+    <div class="pill" style="margin-top:8px">Hz: <span id="hz">0</span></div>
+    <div class="mut" id="fbStatusPhone" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <button id="permBtn" style="display:none;width:100%">Enable Motion (iOS)</button>
+    <div class="mut">Keep this page open; screen on helps stability.</div>
+  </div>
+</div>
+
+<!-- libs -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
 <script type="module">
-  /************ 1) Firebase (paste your config) ************/
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getDatabase, ref, onValue, push, set, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+/* -------- role detection -------- */
+const params = new URLSearchParams(location.search);
+const sidParam = params.get("sid");
+const isLikelyMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-  const firebaseConfig = {
-    // TODO: replace with your Firebase web app config (same as index.html)
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "SENDER_ID",
-    appId: "APP_ID"
-  };
-  const app = initializeApp(firebaseConfig);
-  const db  = getDatabase(app);
+/* -------- Firebase config (ONE PLACE) -------- */
+// <-- PASTE YOUR FIREBASE CONFIG HERE -->
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "SENDER_ID",
+  appId: "APP_ID"
+};
+// ---------------------------------
 
-  /************ 2) Session ************/
-  const params   = new URLSearchParams(location.search);
-  const sessionId = params.get("sid") || "missing";
-  document.getElementById("sid").textContent = "Session: " + sessionId;
+const { initializeApp }  = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
+const { getDatabase, ref, onValue, set, push, remove }
+  = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js");
 
-  /************ 3) WebRTC (phone answers) ************/
-  const stateEl = document.getElementById("state");
-  const hzEl    = document.getElementById("hz");
-  let pkt = 0, t0 = performance.now();
+function mustHaveConfig(){
+  if (!firebaseConfig?.apiKey || !firebaseConfig?.databaseURL) {
+    throw new Error("Firebase config missing. Fill in apiKey + databaseURL, etc.");
+  }
+}
 
-  const pc = new RTCPeerConnection({ iceServers: [{urls:"stun:stun.l.google.com:19302"}] });
-  let chan;
-  pc.ondatachannel = ev => {
-    chan = ev.channel;
-    chan.onopen  = () => { stateEl.textContent = "connected"; stateEl.className="ok"; };
-    chan.onclose = () => { stateEl.textContent = "disconnected"; stateEl.className="bad"; };
-  };
-  pc.onicecandidate = async e => {
-    if (e.candidate) await push(ref(db, `sessions/${sessionId}/phoneIce`), e.candidate.toJSON());
-  };
+/* ===========================================================
+   HOST MODE (desktop, no ?sid)
+=========================================================== */
+async function runHost(){
+  document.getElementById("hostUI").style.display = "";
+  const fbMsg = (s)=>document.getElementById("fbStatus").textContent = s;
 
-  // Get host offer, create answer
-  onValue(ref(db, `sessions/${sessionId}/offer`), async snap => {
-    const offer = snap.val();
-    if (!offer) return;
-    if (!pc.currentRemoteDescription) {
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      await set(ref(db, `sessions/${sessionId}/answer`), answer);
+  // 1) session + QR shown immediately
+  const sessionId = crypto.getRandomValues(new Uint32Array(2)).join("-");
+  document.getElementById("sess").textContent = sessionId;
+
+  const basePath = location.pathname.replace(/[^/]*$/, ''); // keep trailing slash
+  const phoneURL = `${location.origin}${basePath}?sid=${encodeURIComponent(sessionId)}`;
+  QRCode.toCanvas(document.getElementById("qrcanvas"), phoneURL, { width: 300 });
+
+  // 2) Chart.js
+  const labels=[], X=[], Y=[], Z[], L=300;
+  const chart = new Chart(document.getElementById("chart"), {
+    type:"line",
+    data:{ labels, datasets:[
+      {label:"ax", data:X, borderWidth:1, pointRadius:0},
+      {label:"ay", data:Y, borderWidth:1, pointRadius:0},
+      {label:"az", data:Z, borderWidth:1, pointRadius:0},
+    ]},
+    options:{
+      animation:false,
+      interaction:{intersect:false, mode:"nearest"},
+      scales:{ x:{ticks:{display:false},grid:{display:false}},
+               y:{ suggestedMin:-20, suggestedMax:20 } },
+      plugins:{ legend:{ labels:{usePointStyle:true} } }
     }
   });
+  function addPoint(t, ax, ay, az){
+    labels.push(new Date(t).toLocaleTimeString());
+    X.push(ax); Y.push(ay); Z.push(az);
+    if(labels.length>L){ labels.shift(); X.shift(); Y.shift(); Z.shift(); }
+    chart.update();
+  }
 
-  // Host ICE (optional)
-  onValue(ref(db, `sessions/${sessionId}/hostIce`), async snap => {
-    const val = snap.val();
-    if (!val) return;
-    for (const k of Object.keys(val)) {
-      try { await pc.addIceCandidate(val[k]); } catch {}
-    }
-  });
+  // 3) WebRTC + Firebase signaling
+  try {
+    mustHaveConfig();
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+    fbMsg("Firebase ready.");
 
-  addEventListener("beforeunload", () => remove(ref(db, `sessions/${sessionId}`)));
+    const peerStateEl = document.getElementById("peerState");
+    const pktEl = document.getElementById("pkt"); let pkt=0;
 
-  /************ 4) Motion sensors ************/
-  const startBtn = document.getElementById("startBtn");
+    const pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
+    const chan = pc.createDataChannel("accel", { ordered:true });
 
-  async function ensurePermissionIfNeeded(){
-    // iOS Safari requires user gesture + permission call
+    chan.onopen  = ()=>{ peerStateEl.textContent="connected"; peerStateEl.className="ok"; };
+    chan.onclose = ()=>{ peerStateEl.textContent="disconnected"; peerStateEl.className="bad"; };
+    chan.onmessage = (e)=>{
+      try{
+        const d = JSON.parse(e.data);
+        addPoint(d.t,d.ax,d.ay,d.az);
+        pktEl.textContent = (++pkt).toString();
+      }catch{}
+    };
+    pc.onicecandidate = async ev=>{
+      if(ev.candidate) await push(ref(db, `sessions/${sessionId}/hostIce`), ev.candidate.toJSON());
+    };
+
+    const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+    await set(ref(db, `sessions/${sessionId}/offer`), offer);
+
+    onValue(ref(db, `sessions/${sessionId}/answer`), async snap=>{
+      const ans = snap.val();
+      if(ans && !pc.currentRemoteDescription){
+        await pc.setRemoteDescription(new RTCSessionDescription(ans));
+      }
+    });
+
+    onValue(ref(db, `sessions/${sessionId}/phoneIce`), async snap=>{
+      const val = snap.val(); if(!val) return;
+      for(const k of Object.keys(val)){
+        try{ await pc.addIceCandidate(val[k]); }catch{}
+      }
+    });
+
+    addEventListener("beforeunload", ()=> remove(ref(db, `sessions/${sessionId}`)));
+
+  } catch (err){
+    console.error(err);
+    fbMsg("Signaling not active. Check Firebase config / databaseURL.");
+  }
+}
+
+/* ===========================================================
+   PHONE MODE (mobile or any device with ?sid=...)
+=========================================================== */
+async function runPhone(sessionId){
+  document.getElementById("phoneUI").style.display = "";
+  const fbMsg = (s)=>document.getElementById("fbStatusPhone").textContent = s;
+  document.getElementById("sidLabel").textContent = sessionId;
+
+  // iOS motion permission (shown only if required)
+  const btn = document.getElementById("permBtn");
+  async function ensureMotionPermission(){
     const DM = window.DeviceMotionEvent;
     if (DM && typeof DM.requestPermission === "function") {
-      startBtn.style.display = "block";
-      return new Promise(resolve => {
-        startBtn.onclick = async () => {
-          try { await DM.requestPermission(); } catch {}
-          startBtn.style.display = "none";
-          resolve();
+      btn.style.display = "inline-block";
+      await new Promise(res=>{
+        btn.onclick = async ()=>{
+          try{ await DM.requestPermission(); }catch{}
+          btn.style.display = "none"; res();
         };
       });
     }
   }
 
-  function startStreaming(){
-    let lastSend = 0;
-    const targetHz = 30;                 // throttle to ~30 Hz to be kind to radios
-    const minDt = 1000/targetHz;
+  try {
+    mustHaveConfig();
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+    fbMsg("Firebase ready.");
 
-    window.addEventListener("devicemotion", ev => {
-      const now = performance.now();
-      if (!chan || chan.readyState !== "open") return;
-      if (now - lastSend < minDt) return;
-      lastSend = now;
+    const stateEl = document.getElementById("chanState");
+    const hzEl = document.getElementById("hz"); let pkt=0, t0=performance.now();
+
+    const pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
+    let chan;
+    pc.ondatachannel = ev=>{
+      chan = ev.channel;
+      chan.onopen  = ()=>{ stateEl.textContent="connected"; stateEl.className="ok"; };
+      chan.onclose = ()=>{ stateEl.textContent="disconnected"; stateEl.className="bad"; };
+    };
+    pc.onicecandidate = async ev=>{
+      if(ev.candidate) await push(ref(db, `sessions/${sessionId}/phoneIce`), ev.candidate.toJSON());
+    };
+
+    // Get offer → answer
+    onValue(ref(db, `sessions/${sessionId}/offer`), async snap=>{
+      const offer = snap.val(); if(!offer || pc.currentRemoteDescription) return;
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await set(ref(db, `sessions/${sessionId}/answer`), answer);
+    });
+
+    // Optional: host ICE
+    onValue(ref(db, `sessions/${sessionId}/hostIce`), async snap=>{
+      const val = snap.val(); if(!val) return;
+      for(const k of Object.keys(val)){
+        try{ await pc.addIceCandidate(val[k]); }catch{}
+      }
+    });
+
+    await ensureMotionPermission();
+
+    // Stream motion (throttled ~30Hz)
+    let last=0; const targetHz=30, minDt=1000/targetHz;
+    addEventListener("devicemotion", ev=>{
+      if(!chan || chan.readyState!=="open") return;
+      const now = performance.now(); if (now-last < minDt) return; last = now;
 
       const ax = (ev.accelerationIncludingGravity?.x ?? ev.acceleration?.x ?? 0);
       const ay = (ev.accelerationIncludingGravity?.y ?? ev.acceleration?.y ?? 0);
       const az = (ev.accelerationIncludingGravity?.z ?? ev.acceleration?.z ?? 0);
-      const msg = JSON.stringify({ t: Date.now(), ax, ay, az });
-      try { chan.send(msg); pkt++; } catch {}
-      const dt = (now - t0) / 1000; if (dt > 0.33) { hzEl.textContent = (pkt/dt).toFixed(0); pkt=0; t0=now; }
+      try { chan.send(JSON.stringify({t:Date.now(), ax, ay, az})); pkt++; } catch {}
+      const dt=(now-t0)/1000; if (dt>0.33) { hzEl.textContent=(pkt/dt|0).toString(); pkt=0; t0=now; }
     }, { passive:true });
-  }
 
-  // Auto-start where possible; otherwise show button for iOS
-  (async () => {
-    await ensurePermissionIfNeeded();
-    startStreaming();
-  })();
+    // Keep screen awake on phones that support it (optional)
+    if ('wakeLock' in navigator) {
+      try { await navigator.wakeLock.request('screen'); } catch {}
+    }
+
+    addEventListener("beforeunload", ()=> remove(ref(db, `sessions/${sessionId}`)));
+
+  } catch (err){
+    console.error(err);
+    fbMsg("Signaling not active. Check Firebase config / databaseURL.");
+  }
+}
+
+/* -------- bootstrap -------- */
+if (sidParam || isLikelyMobile) {
+  // If a ?sid is present we *force* phone mode (works on any device).
+  // If no ?sid but it's mobile, user likely opened directly — show phone UI but it needs a sid.
+  if (!sidParam && isLikelyMobile) {
+    // Help text if they opened on phone without scanning
+    document.getElementById("phoneUI").style.display = "";
+    document.getElementById("fbStatusPhone").textContent =
+      "No session id in URL. Open this page on a laptop first and scan the QR.";
+  } else {
+    await runPhone(sidParam);
+  }
+} else {
+  await runHost();
+}
 </script>
 </body>
 </html>
