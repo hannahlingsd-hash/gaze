@@ -2,448 +2,67 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Live Motion → Sound Remix</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Motion Sound</title>
 <style>
-  :root {
-    --bg:#0b0b0c; --fg:#e9e9ee; --mut:#9aa0a6; --acc:#5dd4ff; --warn:#ff6b6b;
-    --colR:320px; --track:#40424a; --fill:#e9e9ee;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:linear-gradient(180deg,#0b0b0c,#14141a);color:var(--fg);font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial}
-  .wrap{display:grid;grid-template-columns:minmax(0,1fr) var(--colR);gap:14px;height:100vh;padding:12px}
-  main{min-width:0;display:flex;align-items:center;justify-content:center}
-  .stage{position:relative;width:100%;height:100%;aspect-ratio:16/9;border:1px solid #1f2026;border-radius:14px;overflow:hidden;background:#000}
-  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-  #heat{mix-blend-mode:screen}
-  .hud{
-    position:absolute;left:10px;bottom:10px;background:rgba(0,0,0,.55);
-    padding:6px 10px;border:1px solid #2a2b33;border-radius:10px;font:12px ui-monospace;color:#cfd3dc
-  }
-  .nosrc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9297a3;font:12px ui-monospace}
-  aside{overflow:auto;padding-right:8px}
-  h2{margin:10px 0 6px;font-size:12px;color:#cbd0da;letter-spacing:.06em;text-transform:uppercase}
-  .row{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:center;margin:6px 0}
-  .row>label{color:#cbd0da}
-  input[type="range"]{appearance:none;height:2px;background:linear-gradient(90deg,var(--fill) 0 var(--p,0%),var(--track) var(--p,0%) 100%)}
-  input[type="range"]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;background:#fff;border:1px solid #111;border-radius:0}
-  input[type="file"]{width:100%}
-  .btn{appearance:none;background:#17181e;color:#fff;border:1px solid #2c2d36;padding:6px 10px;cursor:pointer}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .mut{color:var(--mut)}
-  .pill{display:inline-block;padding:2px 6px;border:1px solid #32333c;border-radius:999px;font:11px ui-monospace;color:#cfd3dc}
-  .note{font-size:12px;color:#9aa0a6}
-  .warn{color:var(--warn)}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  body{margin:0;background:#000;color:#fff;font-family:sans-serif;text-align:center}
+  video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #controls{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:10}
+  button{margin:0 4px;padding:6px 12px}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <main>
-    <div class="stage">
-      <canvas id="heat"></canvas>
-      <div id="nosrc" class="nosrc">Click <b>Start Camera</b> (HTTPS required)</div>
-      <div id="hud" class="hud">motion: 0.00 • fps: —</div>
-    </div>
-  </main>
-
-  <aside>
-    <h2>Camera</h2>
-    <div class="grid2" style="margin-bottom:6px">
-      <button id="startCam" class="btn">Start Camera</button>
-      <button id="stopCam" class="btn">Stop</button>
-    </div>
-    <div class="note" style="margin-bottom:10px">If this site isn’t on <b>https://</b> or <b>localhost</b>, your browser will block the camera.</div>
-
-    <h2>Motion Extraction</h2>
-    <div class="row">
-      <label>Δt (s)</label>
-      <input id="dt" type="range" min="0.1" max="3" step="0.1" value="0.7">
-      <span id="dtV">0.7</span>
-    </div>
-    <div class="row">
-      <label>Threshold</label>
-      <input id="thr" type="range" min="8" max="80" step="1" value="28">
-      <span id="thrV">28</span>
-    </div>
-    <div class="row">
-      <label>Sensitivity</label>
-      <input id="sens" type="range" min="0.2" max="3" step="0.1" value="1.3">
-      <span id="sensV">1.3</span>
-    </div>
-    <div class="row">
-      <label>Blur (px)</label>
-      <input id="blur" type="range" min="0" max="3" step="1" value="1">
-      <span id="blurV">1</span>
-    </div>
-    <div class="row">
-      <label>Heat fade</label>
-      <input id="fade" type="range" min="0.80" max="0.995" step="0.001" value="0.93">
-      <span id="fadeV">0.93</span>
-    </div>
-
-    <h2>Audio</h2>
-    <div class="grid2" style="margin-bottom:6px">
-      <button id="audioOn" class="btn">Enable Audio</button>
-      <button id="mute" class="btn">Mute</button>
-    </div>
-    <div class="row">
-      <label>Mode</label>
-      <select id="mode">
-        <option value="loop" selected>Loop Remix (load file)</option>
-        <option value="synth">Built-in Synth</option>
-      </select>
-      <span></span>
-    </div>
-    <div class="row" style="grid-template-columns:1fr 1fr auto">
-      <label>Load loop (WAV/MP3)</label>
-      <input id="file" type="file" accept="audio/*">
-      <span class="pill">optional</span>
-    </div>
-    <div class="row">
-      <label>Gain scale</label>
-      <input id="gainScale" type="range" min="0" max="2" step="0.05" value="1.0">
-      <span id="gainScaleV">1.00</span>
-    </div>
-    <div class="row">
-      <label>Rate range</label>
-      <input id="rateRange" type="range" min="0" max="1" step="0.01" value="0.35">
-      <span id="rateRangeV">0.35</span>
-    </div>
-    <div class="note">Mapping: more motion → louder, faster; less motion → quieter, slower. Crossfade keeps rhythm stable while rate changes.</div>
-
-    <h2>Export Still</h2>
-    <div class="grid2">
-      <button id="savePng" class="btn">Save PNG</button>
-      <span class="mut">Heatmap only</span>
-    </div>
-  </aside>
+<div id="controls">
+  <button id="start">Start Camera</button>
+  <button id="sound">Enable Sound</button>
 </div>
-
-<!-- Hidden video + working canvases -->
-<video id="vid" playsinline muted style="display:none"></video>
-<canvas id="workA" style="display:none"></canvas>
-<canvas id="workB" style="display:none"></canvas>
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
 
 <script>
-(function(){
-  // --- DOM shortcuts
-  const $ = id => document.getElementById(id);
-  const vid = $('vid');
-  const canHeat = $('heat'); const hctx = canHeat.getContext('2d', {willReadFrequently:true});
-  const workA = $('workA'), wA = workA.getContext('2d', {willReadFrequently:true});
-  const workB = $('workB'), wB = workB.getContext('2d', {willReadFrequently:true});
-  const nosrc = $('nosrc'), hud = $('hud');
+const video=document.getElementById('video');
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d',{willReadFrequently:true});
+let w,h,lastFrame,ac,gain,osc,motion=0,speed=0,lastCentroid=null;
 
-  const ui = {
-    startCam:$('startCam'), stopCam:$('stopCam'),
-    dt:$('dt'), dtV:$('dtV'),
-    thr:$('thr'), thrV:$('thrV'),
-    sens:$('sens'), sensV:$('sensV'),
-    blur:$('blur'), blurV:$('blurV'),
-    fade:$('fade'), fadeV:$('fadeV'),
-    audioOn:$('audioOn'), mute:$('mute'),
-    mode:$('mode'),
-    file:$('file'),
-    gainScale:$('gainScale'), gainScaleV:$('gainScaleV'),
-    rateRange:$('rateRange'), rateRangeV:$('rateRangeV'),
-    savePng:$('savePng')
-  };
+document.getElementById('start').onclick=async()=>{
+  const s=await navigator.mediaDevices.getUserMedia({video:true});
+  video.srcObject=s;
+  video.onloadedmetadata=()=>{w=video.videoWidth;h=video.videoHeight;canvas.width=w;canvas.height=h;loop();}
+};
 
-  // --- Sizing
-  function fit(){
-    const r = canHeat.getBoundingClientRect();
-    const dpr = Math.max(1, window.devicePixelRatio||1);
-    const W = Math.max(2, Math.floor(r.width * dpr));
-    const H = Math.max(2, Math.floor(r.height * dpr));
-    [canHeat, workA, workB].forEach(c=>{ c.width=W; c.height=H; });
-  }
-  new ResizeObserver(fit).observe(canHeat); fit();
+document.getElementById('sound').onclick=()=>{
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  gain=ac.createGain();gain.gain.value=0;gain.connect(ac.destination);
+  osc=ac.createOscillator();osc.type='sine';osc.frequency.value=220;osc.connect(gain);osc.start();
+};
 
-  // --- Camera
-  let stream=null;
-  ui.startCam.onclick = async ()=>{
-    const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
-    if(!secure){ alert('Camera requires HTTPS or localhost.'); return; }
-    try{
-      stream = await navigator.mediaDevices.getUserMedia({
-        video:{ width:{ideal:1280}, height:{ideal:720}, facingMode:{ideal:'environment'} }, audio:false
-      });
-      vid.srcObject = stream;
-      await vid.play();
-      nosrc.style.display='none';
-    }catch(e){
-      alert('Camera error: '+(e && e.message ? e.message : e));
-    }
-  };
-  ui.stopCam.onclick = ()=>{ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } vid.pause(); nosrc.style.display='flex'; };
-
-  // --- Controls
-  function syncVal(r, out){ out.textContent = (r.step && r.step.indexOf('.')>-1) ? (+r.value).toFixed(r.step.split('.')[1].length) : r.value; r.style.setProperty('--p', ((+r.value-(+r.min||0))/((+r.max||100)-(+r.min||0)))*100 + '%'); }
-  ['dt','thr','sens','blur','fade','gainScale','rateRange'].forEach(id=>{
-    const r = ui[id], v = ui[id+'V']; syncVal(r,v); r.addEventListener('input', ()=>syncVal(r,v));
-  });
-
-  // --- Motion core
-  const state = {
-    lastStamp: 0,
-    lastFrame: null,
-    accum: 0,
-    motionEMA: 0,
-    fpsEMA: 0
-  };
-
-  function drawVideo(ctx, W, H, blurPx){
-    ctx.save();
-    if(blurPx>0) ctx.filter=`blur(${blurPx}px)`;
-    const vw = vid.videoWidth|0, vh = vid.videoHeight|0;
-    if(vw && vh){
-      const s = Math.min(W/vw, H/vh);
-      const dw = Math.round(vw*s), dh = Math.round(vh*s);
-      const dx = (W-dw)>>1, dy = (H-dh)>>1;
-      ctx.drawImage(vid, dx, dy, dw, dh);
-    }
-    ctx.restore();
-  }
-
-  // --- Audio (Web Audio)
-  let AC=null, master=null, comp=null, lp=null, loopBuf=null;
-  let loopA=null, loopB=null, loopStart=0, loopDur=0, loopPlaying=false;
-  let muted=false;
-
-  function ensureAudio(){
-    if(AC) return;
-    AC = new (window.AudioContext||window.webkitAudioContext)();
-    comp = AC.createDynamicsCompressor();
-    lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=18000;
-    master = AC.createGain(); master.gain.value=0.0;
-    comp.connect(lp).connect(master).connect(AC.destination);
-  }
-
-  ui.audioOn.onclick = async ()=>{
-    ensureAudio();
-    try{ await AC.resume(); }catch(_){}
-  };
-  ui.mute.onclick = ()=>{
-    muted = !muted;
-    ui.mute.textContent = muted ? 'Unmute' : 'Mute';
-    if(master) master.gain.value = muted ? 0 : master.gain.value;
-  };
-
-  // Load loop
-  ui.file.addEventListener('change', async (e)=>{
-    const f = e.target.files && e.target.files[0];
-    if(!f) return;
-    ensureAudio();
-    const arr = await f.arrayBuffer();
-    loopBuf = await AC.decodeAudioData(arr);
-    loopDur = loopBuf.duration;
-    startLoopRemix();
-  });
-
-  function stopLoops(){
-    [loopA, loopB].forEach(s=>{ try{ s && s.stop(); }catch(_){}} );
-    loopA=loopB=null; loopPlaying=false;
-  }
-
-  function startLoopRemix(){
-    if(!AC || !loopBuf) return;
-    stopLoops();
-    // Two staggered players → crossfade + rate warp
-    loopA = AC.createBufferSource(); loopA.buffer = loopBuf; loopA.loop = true;
-    loopB = AC.createBufferSource(); loopB.buffer = loopBuf; loopB.loop = true;
-
-    const gA = AC.createGain(), gB = AC.createGain();
-    gA.gain.value = 1; gB.gain.value = 0;
-
-    loopA.connect(gA).connect(comp);
-    loopB.connect(gB).connect(comp);
-
-    loopStart = AC.currentTime + 0.05;
-    const offsetB = loopDur/2; // half-cycle offset for textured crossfade
-    loopA.start(loopStart);
-    loopB.start(loopStart, offsetB % loopDur);
-    loopPlaying = true;
-
-    // store for mod
-    loopA._gain = gA; loopB._gain = gB;
-  }
-
-  // Built-in synth fallback
-  let synth = null;
-  function ensureSynth(){
-    ensureAudio();
-    if(synth) return synth;
-    const g = AC.createGain(); g.gain.value = 0.0;
-    g.connect(comp);
-    synth = {
-      g,
-      tickKick(){
-        const o = AC.createOscillator();
-        const og = AC.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(120, AC.currentTime);
-        o.frequency.exponentialRampToValueAtTime(40, AC.currentTime+0.12);
-        og.gain.setValueAtTime(0.8, AC.currentTime);
-        og.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+0.14);
-        o.connect(og).connect(g); o.start(); o.stop(AC.currentTime+0.16);
-      },
-      tickNoise(){
-        const buf = AC.createBuffer(1, AC.sampleRate*0.12, AC.sampleRate);
-        const data = buf.getChannelData(0);
-        for(let i=0;i<data.length;i++) data[i] = (Math.random()*2-1)*0.7;
-        const src = AC.createBufferSource(); src.buffer = buf;
-        const sh = AC.createBiquadFilter(); sh.type='highpass'; sh.frequency.value=4000;
-        const eg = AC.createGain();
-        eg.gain.value = 0.6;
-        eg.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+0.12);
-        src.connect(sh).connect(eg).connect(g); src.start(); src.stop(AC.currentTime+0.13);
-      },
-      tone(level){
-        const o = AC.createOscillator(); o.type='triangle';
-        const eg = AC.createGain(); eg.gain.value = Math.min(0.2, 0.02 + 0.18*level);
-        o.frequency.value = 220 + 660*level;
-        o.connect(eg).connect(g);
-        o.start(); o.stop(AC.currentTime + 0.08 + 0.25*level);
-      }
-    };
-    return synth;
-  }
-
-  // --- Mapping motion → audio params
-  function applyAudioFromMotion(m){
-    if(!AC) return;
-    // Smooth motion (already EMAed), clamp 0..1
-    const motion = Math.max(0, Math.min(1, m));
-    const gainScale = +ui.gainScale.value;          // 0..2
-    const rateRange = +ui.rateRange.value;          // 0..1 → range of playbackRate warp
-
-    // Master gain target
-    const targetGain = muted ? 0 : Math.min(1.0, motion * (0.7*gainScale));
-    if(master){
-      master.gain.cancelScheduledValues(AC.currentTime);
-      master.gain.linearRampToValueAtTime(targetGain, AC.currentTime + 0.05);
-    }
-
-    // Gentle LP filter opening with motion
-    const freq = 400 + motion * 18000;
-    if(lp){
-      lp.frequency.cancelScheduledValues(AC.currentTime);
-      lp.frequency.linearRampToValueAtTime(freq, AC.currentTime + 0.06);
-    }
-
-    if(ui.mode.value === 'loop'){
-      if(loopBuf && !loopPlaying) startLoopRemix();
-      if(loopA && loopB){
-        // Crossfade based on motion (adds texture without huge volume spikes)
-        const x = motion;
-        const a = Math.cos(x * Math.PI * 0.5); // equal-power crossfade
-        const b = Math.sin(x * Math.PI * 0.5);
-        loopA._gain.gain.linearRampToValueAtTime(a, AC.currentTime + 0.05);
-        loopB._gain.gain.linearRampToValueAtTime(b, AC.currentTime + 0.05);
-
-        const base = 1.0;
-        const pr = base + (motion*2-1) * rateRange; // e.g. 1 ± range
-        loopA.playbackRate.value = Math.max(0.5, Math.min(2.0, pr));
-        loopB.playbackRate.value = Math.max(0.5, Math.min(2.0, 2-pr)); // slight counter-warp
-      }
-    } else {
-      // Synth pulses driven by motion magnitude as tempo
-      const s = ensureSynth();
-      const tempo = 40 + motion*140; // BPM
-      const period = 60/tempo;
-      // Schedule sparse hits: kick on beat, noise on upbeat, a short tone with level
-      if(!applyAudioFromMotion._next || AC.currentTime >= applyAudioFromMotion._next){
-        s.tickKick();
-        setTimeout(()=>s.tickNoise(), period*500);
-        s.tone(motion);
-        applyAudioFromMotion._next = AC.currentTime + period;
-      }
-      s.g.gain.linearRampToValueAtTime(muted ? 0 : Math.min(0.8, 0.4*gainScale), AC.currentTime+0.05);
-    }
-  }
-
-  // --- Render loop
-  let lastT = performance.now();
-  function loop(now){
-    requestAnimationFrame(loop);
-
-    const W = canHeat.width, H = canHeat.height;
-    if(!W || !H) return;
-
-    // Clear & gently fade previous heat
-    const fade = 1 - Math.max(0.80, Math.min(0.995, +ui.fade.value));
-    hctx.globalCompositeOperation = 'destination-out';
-    hctx.fillStyle = `rgba(0,0,0,${fade})`;
-    hctx.fillRect(0,0,W,H);
-    hctx.globalCompositeOperation = 'source-over';
-
-    if(vid.readyState >= 2){
-      // Δt buffering: draw two frames spaced apart in time
-      // We approximate by: current frame in workA; previous cached ImageData in workB.
-      drawVideo(wA, W, H, +ui.blur.value);
-      const curr = wA.getImageData(0,0,W,H);
-
-      // Build/keep a circular buffer of past frames by time spacing
-      const want = Math.max(0.1, +ui.dt.value);
-      if(!state.lastFrame || (vid.currentTime - state.lastStamp) >= want){
-        // stamp current into lastFrame
-        state.lastFrame = curr;
-        state.lastStamp = vid.currentTime;
-      }
-
-      const prev = state.lastFrame;
-      if(prev){
-        const thr = +ui.thr.value;
-        const sens = +ui.sens.value;
-        const cd = curr.data, pd = prev.data;
-        // Heatmap pass (cheap): write red intensity per pixel where |Δluma| > thr
-        const step = 4;
-        let changed = 0;
-        const rowSkip = 1, colSkip = 1; // set >1 to decimate for speed
-        for(let y=0; y<H; y+=rowSkip){
-          for(let x=0; x<W; x+=colSkip){
-            const i = (y*W + x) * 4;
-            const r=cd[i], g=cd[i+1], b=cd[i+2];
-            const pr=pd[i], pg=pd[i+1], pb=pd[i+2];
-            const l = r*0.2126 + g*0.7152 + b*0.0722;
-            const q = pr*0.2126 + pg*0.7152 + pb*0.0722;
-            const d = Math.abs(l - q);
-            if(d > thr){
-              changed++;
-              const a = Math.min(255, (d-thr) * (2.0 * sens));
-              hctx.fillStyle = `rgba(93,212,255,${Math.min(1, a/255)})`; // cyan heat
-              hctx.fillRect(x, y, 1, 1);
-            }
-          }
-        }
-        // Normalize motion magnitude ~ fraction of pixels changed
-        const m = changed / (W*H/ (rowSkip*colSkip));
-        // EMA for stability
-        state.motionEMA = state.motionEMA*0.85 + Math.min(1, m*12)*0.15;
-
-        // Audio mapping
-        applyAudioFromMotion(state.motionEMA);
-      }
-    }
-
-    // HUD
-    const dt = now - lastT; lastT = now;
-    const inst = dt>0 ? 1000/dt : 0;
-    state.fpsEMA = state.fpsEMA ? state.fpsEMA*0.9 + inst*0.1 : inst;
-    hud.textContent = `motion: ${state.motionEMA.toFixed(2)} • fps: ${state.fpsEMA.toFixed(1)}`;
-  }
+function loop(){
   requestAnimationFrame(loop);
-
-  // --- Export still
-  ui.savePng.onclick = ()=>{
-    const a = document.createElement('a');
-    a.download = `motion_heat_${Date.now()}.png`;
-    a.href = canHeat.toDataURL('image/png');
-    a.click();
-  };
-
-})();
+  if(!w||!h) return;
+  ctx.drawImage(video,0,0,w,h);
+  const img=ctx.getImageData(0,0,w,h);
+  if(!lastFrame){lastFrame=img;return;}
+  let changed=0,sumx=0,sumy=0;
+  for(let i=0;i<img.data.length;i+=4){
+    const d=Math.abs(img.data[i]-lastFrame.data[i])+Math.abs(img.data[i+1]-lastFrame.data[i+1])+Math.abs(img.data[i+2]-lastFrame.data[i+2]);
+    if(d>60){changed++;const p=i/4;sumx+=p%w;sumy+=Math.floor(p/w);}
+  }
+  const m=changed/(w*h)*100;
+  if(changed>0){
+    const cx=sumx/changed,cy=sumy/changed;
+    if(lastCentroid){const dx=cx-lastCentroid.x,dy=cy-lastCentroid.y;speed=Math.sqrt(dx*dx+dy*dy)/w;}
+    lastCentroid={x:cx,y:cy};
+  }
+  motion=motion*0.8+m*0.2;
+  if(ac){
+    const vol=Math.min(1,motion/5);
+    const rate=1+Math.min(2,speed*5);
+    gain.gain.linearRampToValueAtTime(vol,ac.currentTime+0.05);
+    osc.frequency.linearRampToValueAtTime(200*rate,ac.currentTime+0.05);
+  }
+  lastFrame=img;
+}
 </script>
 </body>
 </html>
