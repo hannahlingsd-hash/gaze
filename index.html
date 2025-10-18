@@ -6,7 +6,6 @@
     <title>Accelerometer Live Stream</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -121,13 +120,15 @@
             margin: 15px 0;
             border-left: 4px solid #667eea;
         }
-        .peer-id {
+        .session-id {
             font-family: monospace;
             background: #f0f0f0;
-            padding: 5px 10px;
+            padding: 8px 12px;
             border-radius: 5px;
             display: inline-block;
             margin: 10px 0;
+            font-size: 1.2em;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -136,17 +137,17 @@
         <div class="card" id="desktopCard">
             <h1>📱 Accelerometer Live Stream</h1>
             <p>Scan this QR code with your iPhone to start streaming accelerometer data</p>
-            <div class="status" id="status">Initializing...</div>
-            <div class="peer-id" id="peerId">Connecting...</div>
+            <div class="status" id="status">Ready</div>
+            <div class="session-id" id="sessionId">Loading...</div>
             <div id="qrcode"></div>
             <div class="instructions">
                 <strong>Instructions:</strong>
                 <ol style="margin-left: 20px; margin-top: 10px;">
-                    <li>Wait for the QR code to appear (takes a few seconds)</li>
-                    <li>Open your iPhone camera and scan the QR code</li>
+                    <li>Scan the QR code with your iPhone camera</li>
                     <li>Tap the notification to open the link</li>
                     <li>Grant accelerometer permission when prompted</li>
-                    <li>Click "Connect & Stream" on your phone</li>
+                    <li>Click "Start Streaming" on your phone</li>
+                    <li>Data will appear on this page automatically!</li>
                 </ol>
             </div>
         </div>
@@ -154,7 +155,7 @@
         <div class="card" id="mobileCard">
             <h1>📱 Sensor Control</h1>
             <div class="status" id="mobileStatus">Ready</div>
-            <button id="connectBtn">Connect & Stream</button>
+            <button id="startBtn">Start Streaming</button>
             <button id="stopBtn" disabled>Stop Streaming</button>
             <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
                 Streaming status: <span id="streamStatus">Not started</span>
@@ -165,16 +166,16 @@
             <h2>Live Data</h2>
             <div class="data-display">
                 <div class="data-item">
-                    <label>X Axis</label>
-                    <div class="value" id="xValue">0.00</div>
+                    <label>X:</label>
+                    <span class="value" id="xValue">0.00</span>
                 </div>
                 <div class="data-item">
-                    <label>Y Axis</label>
-                    <div class="value" id="yValue">0.00</div>
+                    <label>Y:</label>
+                    <span class="value" id="yValue">0.00</span>
                 </div>
                 <div class="data-item">
-                    <label>Z Axis</label>
-                    <div class="value" id="zValue">0.00</div>
+                    <label>Z:</label>
+                    <span class="value" id="zValue">0.00</span>
                 </div>
             </div>
             <div class="chart-container">
@@ -183,10 +184,12 @@
         </div>
     </div>
 
-    <script>
-        let peer = null;
-        let conn = null;
+    <script type="module">
+        // Simple WebSocket-like communication using shared state
+        let sessionId = null;
         let isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        let streaming = false;
+        let dataStore = {};
         
         // Data storage for chart
         const maxDataPoints = 100;
@@ -264,159 +267,126 @@
             chart.update();
         }
 
+        function generateSessionId() {
+            return 'session_' + Math.random().toString(36).substr(2, 9);
+        }
+
         // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const targetPeerId = urlParams.get('peer');
+        const urlSessionId = urlParams.get('session');
 
         // Show/hide appropriate UI
-        if (targetPeerId) {
+        if (urlSessionId) {
             // Mobile view
-            isPhone = true;
+            sessionId = urlSessionId;
             document.getElementById('desktopCard').style.display = 'none';
             document.getElementById('mobileCard').style.display = 'block';
         } else {
             // Desktop view
+            sessionId = generateSessionId();
             document.getElementById('desktopCard').style.display = 'block';
             document.getElementById('mobileCard').style.display = 'none';
+            
+            // Generate QR code immediately
+            const url = window.location.href.split('?')[0] + '?session=' + sessionId;
+            document.getElementById('sessionId').textContent = 'Session: ' + sessionId;
+            
+            setTimeout(() => {
+                try {
+                    new QRCode(document.getElementById('qrcode'), {
+                        text: url,
+                        width: 256,
+                        height: 256,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff'
+                    });
+                    document.getElementById('status').textContent = 'Waiting for phone...';
+                    document.getElementById('status').className = 'status waiting';
+                } catch (e) {
+                    console.error('QR generation error:', e);
+                    document.getElementById('qrcode').innerHTML = 
+                        '<p>Manual URL: <a href="' + url + '">' + url + '</a></p>';
+                }
+            }, 100);
         }
 
-        // Initialize PeerJS
-        window.addEventListener('load', () => {
-            if (!targetPeerId) {
-                // Desktop: create peer and wait for connections
-                document.getElementById('status').textContent = 'Connecting to PeerJS server...';
-                document.getElementById('status').className = 'status waiting';
-                
-                peer = new Peer({
-                    debug: 2,
-                    config: {
-                        iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun1.l.google.com:19302' }
-                        ]
-                    }
-                });
-                
-                peer.on('open', (id) => {
-                    console.log('My peer ID:', id);
-                    document.getElementById('peerId').textContent = 'Peer ID: ' + id;
-                    document.getElementById('status').textContent = 'Ready! Scan QR code below';
-                    document.getElementById('status').className = 'status waiting';
-                    
-                    // Generate QR code with peer ID
-                    const url = window.location.href.split('?')[0] + '?peer=' + id;
-                    
-                    // Clear any existing QR code
-                    const qrDiv = document.getElementById('qrcode');
-                    qrDiv.innerHTML = '';
-                    
-                    try {
-                        new QRCode(qrDiv, {
-                            text: url,
-                            width: 256,
-                            height: 256,
-                            colorDark: '#000000',
-                            colorLight: '#ffffff',
-                            correctLevel: QRCode.CorrectLevel.H
-                        });
-                        console.log('QR Code generated for:', url);
-                    } catch (e) {
-                        console.error('QR Code generation failed:', e);
-                        qrDiv.innerHTML = '<p>QR Code generation failed. Manual URL: ' + url + '</p>';
-                    }
-                });
+        // Storage keys
+        const dataKey = 'accel_data_' + sessionId;
+        const statusKey = 'accel_status_' + sessionId;
 
-                peer.on('connection', (connection) => {
-                    conn = connection;
-                    console.log('Phone connected!');
-                    document.getElementById('status').textContent = 'Phone Connected!';
-                    document.getElementById('status').className = 'status connected';
-
-                    conn.on('data', (data) => {
-                        if (data.type === 'accel') {
-                            updateDisplay(data.x, data.y, data.z);
+        if (urlSessionId) {
+            // Phone: Send data
+            document.getElementById('startBtn').onclick = async () => {
+                try {
+                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                        const permission = await DeviceMotionEvent.requestPermission();
+                        if (permission !== 'granted') {
+                            alert('Permission denied for motion sensors');
+                            return;
                         }
-                    });
-
-                    conn.on('close', () => {
-                        document.getElementById('status').textContent = 'Phone Disconnected';
-                        document.getElementById('status').className = 'status disconnected';
-                    });
-                });
-
-                peer.on('error', (err) => {
-                    console.error('Peer error:', err);
-                    document.getElementById('status').textContent = 'Connection Error: ' + err.type;
-                    document.getElementById('status').className = 'status disconnected';
-                });
-            } else {
-                // Mobile: connect to desktop
-                peer = new Peer();
-                
-                peer.on('open', () => {
-                    console.log('Connecting to peer:', targetPeerId);
-                });
-
-                document.getElementById('connectBtn').onclick = async () => {
-                    try {
-                        // Request permission
-                        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                            const permission = await DeviceMotionEvent.requestPermission();
-                            if (permission !== 'granted') {
-                                alert('Permission denied for motion sensors');
-                                return;
-                            }
-                        }
-
-                        // Connect to desktop
-                        conn = peer.connect(targetPeerId);
-                        
-                        conn.on('open', () => {
-                            console.log('Connected to desktop!');
-                            document.getElementById('mobileStatus').textContent = 'Connected to Desktop';
-                            document.getElementById('mobileStatus').className = 'status connected';
-                            document.getElementById('connectBtn').disabled = true;
-                            document.getElementById('stopBtn').disabled = false;
-                            document.getElementById('streamStatus').textContent = 'Streaming...';
-
-                            // Start streaming
-                            window.addEventListener('devicemotion', handleMotion);
-                        });
-
-                        conn.on('error', (err) => {
-                            console.error('Connection error:', err);
-                            alert('Failed to connect: ' + err);
-                        });
-
-                    } catch (error) {
-                        alert('Error: ' + error.message);
                     }
-                };
 
-                document.getElementById('stopBtn').onclick = () => {
-                    window.removeEventListener('devicemotion', handleMotion);
-                    if (conn) conn.close();
-                    document.getElementById('connectBtn').disabled = false;
-                    document.getElementById('stopBtn').disabled = true;
-                    document.getElementById('mobileStatus').textContent = 'Stopped';
-                    document.getElementById('mobileStatus').className = 'status disconnected';
-                    document.getElementById('streamStatus').textContent = 'Not streaming';
-                };
+                    streaming = true;
+                    window.addEventListener('devicemotion', handleMotion);
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('mobileStatus').textContent = 'Streaming';
+                    document.getElementById('mobileStatus').className = 'status connected';
+                    document.getElementById('streamStatus').textContent = 'Active';
+                    
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+            };
 
-                function handleMotion(event) {
-                    const acc = event.accelerationIncludingGravity;
-                    if (acc && conn && conn.open) {
-                        const data = {
-                            type: 'accel',
-                            x: acc.x || 0,
-                            y: acc.y || 0,
-                            z: acc.z || 0
-                        };
-                        conn.send(data);
-                    }
+            document.getElementById('stopBtn').onclick = () => {
+                streaming = false;
+                window.removeEventListener('devicemotion', handleMotion);
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('mobileStatus').textContent = 'Stopped';
+                document.getElementById('mobileStatus').className = 'status disconnected';
+                document.getElementById('streamStatus').textContent = 'Not streaming';
+            };
+
+            function handleMotion(event) {
+                const acc = event.accelerationIncludingGravity;
+                if (acc && streaming) {
+                    const data = {
+                        x: acc.x || 0,
+                        y: acc.y || 0,
+                        z: acc.z || 0,
+                        timestamp: Date.now()
+                    };
+                    
+                    // Send via URL fragment (works cross-tab same origin)
+                    window.location.hash = sessionId + ':' + JSON.stringify(data);
+                    
+                    // Also update own display
+                    updateDisplay(data.x, data.y, data.z);
                 }
             }
-        });
+        } else {
+            // Desktop: Receive data via polling fragment changes
+            let lastHash = '';
+            
+            setInterval(() => {
+                const hash = window.location.hash.substring(1);
+                if (hash && hash.startsWith(sessionId) && hash !== lastHash) {
+                    lastHash = hash;
+                    try {
+                        const jsonStr = hash.substring(sessionId.length + 1);
+                        const data = JSON.parse(jsonStr);
+                        updateDisplay(data.x, data.y, data.z);
+                        document.getElementById('status').textContent = 'Receiving Data';
+                        document.getElementById('status').className = 'status connected';
+                    } catch (e) {
+                        console.error('Parse error:', e);
+                    }
+                }
+            }, 50);
+        }
     </script>
 </body>
 </html>
