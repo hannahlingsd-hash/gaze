@@ -284,21 +284,46 @@
         window.addEventListener('load', () => {
             if (!targetPeerId) {
                 // Desktop: create peer and wait for connections
-                peer = new Peer();
+                document.getElementById('status').textContent = 'Connecting to PeerJS server...';
+                document.getElementById('status').className = 'status waiting';
+                
+                peer = new Peer({
+                    debug: 2,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' }
+                        ]
+                    }
+                });
                 
                 peer.on('open', (id) => {
                     console.log('My peer ID:', id);
                     document.getElementById('peerId').textContent = 'Peer ID: ' + id;
-                    document.getElementById('status').textContent = 'Waiting for phone connection...';
+                    document.getElementById('status').textContent = 'Ready! Scan QR code below';
                     document.getElementById('status').className = 'status waiting';
                     
                     // Generate QR code with peer ID
                     const url = window.location.href.split('?')[0] + '?peer=' + id;
-                    new QRCode(document.getElementById('qrcode'), {
-                        text: url,
-                        width: 256,
-                        height: 256
-                    });
+                    
+                    // Clear any existing QR code
+                    const qrDiv = document.getElementById('qrcode');
+                    qrDiv.innerHTML = '';
+                    
+                    try {
+                        new QRCode(qrDiv, {
+                            text: url,
+                            width: 256,
+                            height: 256,
+                            colorDark: '#000000',
+                            colorLight: '#ffffff',
+                            correctLevel: QRCode.CorrectLevel.H
+                        });
+                        console.log('QR Code generated for:', url);
+                    } catch (e) {
+                        console.error('QR Code generation failed:', e);
+                        qrDiv.innerHTML = '<p>QR Code generation failed. Manual URL: ' + url + '</p>';
+                    }
                 });
 
                 peer.on('connection', (connection) => {
