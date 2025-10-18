@@ -107,12 +107,6 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
-        .mobile-view {
-            display: none;
-        }
-        .desktop-view {
-            display: block;
-        }
         .instructions {
             background: #f8f9fa;
             padding: 15px;
@@ -137,7 +131,7 @@
         <div class="card" id="desktopCard">
             <h1>📱 Accelerometer Live Stream</h1>
             <p>Scan this QR code with your iPhone to start streaming accelerometer data</p>
-            <div class="status" id="status">Ready</div>
+            <div class="status" id="status">Ready - No signup required!</div>
             <div class="session-id" id="sessionId">Loading...</div>
             <div id="qrcode"></div>
             <div class="instructions">
@@ -147,7 +141,7 @@
                     <li>Tap the notification to open the link</li>
                     <li>Grant accelerometer permission when prompted</li>
                     <li>Click "Start Streaming" on your phone</li>
-                    <li>Data will appear on this page automatically!</li>
+                    <li>Data streams through a free public relay service!</li>
                 </ol>
             </div>
         </div>
@@ -158,7 +152,7 @@
             <button id="startBtn">Start Streaming</button>
             <button id="stopBtn" disabled>Stop Streaming</button>
             <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                Streaming status: <span id="streamStatus">Not started</span>
+                Sent: <span id="sentCount">0</span> packets
             </p>
         </div>
 
@@ -184,12 +178,16 @@
         </div>
     </div>
 
-    <script type="module">
-        // Simple WebSocket-like communication using shared state
+    <script>
+        // Using a free public WebSocket relay service
+        const WS_SERVER = 'wss://socketsbay.com/wss/v2/1/demo/';
+        
+        let ws = null;
         let sessionId = null;
         let isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         let streaming = false;
-        let dataStore = {};
+        let sentCount = 0;
+        let reconnectAttempts = 0;
         
         // Data storage for chart
         const maxDataPoints = 100;
@@ -268,7 +266,7 @@
         }
 
         function generateSessionId() {
-            return 'session_' + Math.random().toString(36).substr(2, 9);
+            return 'accel-' + Math.random().toString(36).substr(2, 9);
         }
 
         // Get URL parameters
@@ -277,17 +275,14 @@
 
         // Show/hide appropriate UI
         if (urlSessionId) {
-            // Mobile view
             sessionId = urlSessionId;
             document.getElementById('desktopCard').style.display = 'none';
             document.getElementById('mobileCard').style.display = 'block';
         } else {
-            // Desktop view
             sessionId = generateSessionId();
             document.getElementById('desktopCard').style.display = 'block';
             document.getElementById('mobileCard').style.display = 'none';
             
-            // Generate QR code immediately
             const url = window.location.href.split('?')[0] + '?session=' + sessionId;
             document.getElementById('sessionId').textContent = 'Session: ' + sessionId;
             
@@ -300,19 +295,78 @@
                         colorDark: '#000000',
                         colorLight: '#ffffff'
                     });
-                    document.getElementById('status').textContent = 'Waiting for phone...';
-                    document.getElementById('status').className = 'status waiting';
                 } catch (e) {
                     console.error('QR generation error:', e);
-                    document.getElementById('qrcode').innerHTML = 
-                        '<p>Manual URL: <a href="' + url + '">' + url + '</a></p>';
                 }
             }, 100);
         }
 
-        // Storage keys
-        const dataKey = 'accel_data_' + sessionId;
-        const statusKey = 'accel_status_' + sessionId;
+        // WebSocket connection
+        function connectWebSocket() {
+            try {
+                ws = new WebSocket(WS_SERVER);
+                
+                ws.onopen = () => {
+                    console.log('Connected to relay server');
+                    reconnectAttempts = 0;
+                    
+                    // Join session channel
+                    ws.send(JSON.stringify({
+                        type: 'join',
+                        session: sessionId
+                    }));
+
+                    if (urlSessionId) {
+                        document.getElementById('mobileStatus').textContent = 'Connected to relay';
+                        document.getElementById('mobileStatus').className = 'status connected';
+                    } else {
+                        document.getElementById('status').textContent = 'Connected - Waiting for phone...';
+                        document.getElementById('status').className = 'status waiting';
+                    }
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        
+                        if (msg.type === 'accel' && msg.session === sessionId) {
+                            updateDisplay(msg.x, msg.y, msg.z);
+                            
+                            if (!urlSessionId) {
+                                document.getElementById('status').textContent = 'Receiving Data ✓';
+                                document.getElementById('status').className = 'status connected';
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Message parse error:', e);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+
+                ws.onclose = () => {
+                    console.log('Disconnected from relay');
+                    
+                    if (!urlSessionId) {
+                        document.getElementById('status').textContent = 'Disconnected - Reconnecting...';
+                        document.getElementById('status').className = 'status disconnected';
+                    }
+                    
+                    // Reconnect after delay
+                    if (reconnectAttempts < 10) {
+                        reconnectAttempts++;
+                        setTimeout(connectWebSocket, 2000);
+                    }
+                };
+            } catch (e) {
+                console.error('Connection error:', e);
+            }
+        }
+
+        // Start connection
+        connectWebSocket();
 
         if (urlSessionId) {
             // Phone: Send data
@@ -331,9 +385,8 @@
                     
                     document.getElementById('startBtn').disabled = true;
                     document.getElementById('stopBtn').disabled = false;
-                    document.getElementById('mobileStatus').textContent = 'Streaming';
+                    document.getElementById('mobileStatus').textContent = 'Streaming ✓';
                     document.getElementById('mobileStatus').className = 'status connected';
-                    document.getElementById('streamStatus').textContent = 'Active';
                     
                 } catch (error) {
                     alert('Error: ' + error.message);
@@ -347,45 +400,31 @@
                 document.getElementById('stopBtn').disabled = true;
                 document.getElementById('mobileStatus').textContent = 'Stopped';
                 document.getElementById('mobileStatus').className = 'status disconnected';
-                document.getElementById('streamStatus').textContent = 'Not streaming';
             };
 
+            let lastSent = 0;
             function handleMotion(event) {
+                const now = Date.now();
+                if (now - lastSent < 50) return; // Max 20 updates/sec
+                lastSent = now;
+
                 const acc = event.accelerationIncludingGravity;
-                if (acc && streaming) {
+                if (acc && streaming && ws && ws.readyState === WebSocket.OPEN) {
                     const data = {
+                        type: 'accel',
+                        session: sessionId,
                         x: acc.x || 0,
                         y: acc.y || 0,
-                        z: acc.z || 0,
-                        timestamp: Date.now()
+                        z: acc.z || 0
                     };
                     
-                    // Send via URL fragment (works cross-tab same origin)
-                    window.location.hash = sessionId + ':' + JSON.stringify(data);
+                    ws.send(JSON.stringify(data));
+                    sentCount++;
+                    document.getElementById('sentCount').textContent = sentCount;
                     
-                    // Also update own display
                     updateDisplay(data.x, data.y, data.z);
                 }
             }
-        } else {
-            // Desktop: Receive data via polling fragment changes
-            let lastHash = '';
-            
-            setInterval(() => {
-                const hash = window.location.hash.substring(1);
-                if (hash && hash.startsWith(sessionId) && hash !== lastHash) {
-                    lastHash = hash;
-                    try {
-                        const jsonStr = hash.substring(sessionId.length + 1);
-                        const data = JSON.parse(jsonStr);
-                        updateDisplay(data.x, data.y, data.z);
-                        document.getElementById('status').textContent = 'Receiving Data';
-                        document.getElementById('status').className = 'status connected';
-                    } catch (e) {
-                        console.error('Parse error:', e);
-                    }
-                }
-            }, 50);
         }
     </script>
 </body>
