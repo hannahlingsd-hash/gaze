@@ -328,20 +328,22 @@
   // --- Mapping motion → audio params
   function applyAudioFromMotion(m){
     if(!AC) return;
-    // Smooth motion (already EMAed), clamp 0..1
-    const motion = Math.max(0, Math.min(1, m));
-    const gainScale = +ui.gainScale.value;          // 0..2
-    const rateRange = +ui.rateRange.value;          // 0..1 → range of playbackRate warp
+    // HARD LIMITS - Keep motion in a controlled range
+    const motion = Math.max(0.1, Math.min(0.7, m)); // Never below 0.1, never above 0.7
+    
+    const gainScale = +ui.gainScale.value;
+    const rateRange = +ui.rateRange.value;
 
-    // Master gain target
-    const targetGain = muted ? 0 : Math.min(1.0, motion * (0.7*gainScale));
+    // Master gain with hard ceiling
+    const targetGain = muted ? 0 : Math.min(0.6, motion * (0.5 * gainScale)); // Max gain 0.6
+    
     if(master){
       master.gain.cancelScheduledValues(AC.currentTime);
       master.gain.linearRampToValueAtTime(targetGain, AC.currentTime + 0.05);
     }
 
-    // Gentle LP filter opening with motion
-    const freq = 400 + motion * 18000;
+    // Filter range limits
+    const freq = 600 + motion * 8000; // Reduced from 18000 to 8000 max
     if(lp){
       lp.frequency.cancelScheduledValues(AC.currentTime);
       lp.frequency.linearRampToValueAtTime(freq, AC.currentTime + 0.06);
@@ -350,31 +352,33 @@
     if(ui.mode.value === 'loop'){
       if(loopBuf && !loopPlaying) startLoopRemix();
       if(loopA && loopB){
-        // Crossfade based on motion (adds texture without huge volume spikes)
+        // Crossfade with reduced range
         const x = motion;
-        const a = Math.cos(x * Math.PI * 0.5); // equal-power crossfade
+        const a = Math.cos(x * Math.PI * 0.5);
         const b = Math.sin(x * Math.PI * 0.5);
         loopA._gain.gain.linearRampToValueAtTime(a, AC.currentTime + 0.05);
         loopB._gain.gain.linearRampToValueAtTime(b, AC.currentTime + 0.05);
 
+        // Playback rate with tighter range
         const base = 1.0;
-        const pr = base + (motion*2-1) * rateRange; // e.g. 1 ± range
-        loopA.playbackRate.value = Math.max(0.5, Math.min(2.0, pr));
-        loopB.playbackRate.value = Math.max(0.5, Math.min(2.0, 2-pr)); // slight counter-warp
+        const pr = Math.max(0.7, Math.min(1.5, base + (motion*2-1) * rateRange * 0.5)); // Reduced range
+        loopA.playbackRate.value = pr;
+        loopB.playbackRate.value = Math.max(0.7, Math.min(1.5, 2-pr));
       }
     } else {
-      // Synth pulses driven by motion magnitude as tempo
+      // Synth with limited output
       const s = ensureSynth();
-      const tempo = 40 + motion*140; // BPM
+      const tempo = 60 + motion*80; // Reduced BPM range
       const period = 60/tempo;
-      // Schedule sparse hits: kick on beat, noise on upbeat, a short tone with level
+      
       if(!applyAudioFromMotion._next || AC.currentTime >= applyAudioFromMotion._next){
         s.tickKick();
         setTimeout(()=>s.tickNoise(), period*500);
         s.tone(motion);
         applyAudioFromMotion._next = AC.currentTime + period;
       }
-      s.g.gain.linearRampToValueAtTime(muted ? 0 : Math.min(0.8, 0.4*gainScale), AC.currentTime+0.05);
+      // Limited synth gain
+      s.g.gain.linearRampToValueAtTime(muted ? 0 : Math.min(0.5, 0.3*gainScale), AC.currentTime+0.05);
     }
   }
 
