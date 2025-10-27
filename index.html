@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -36,6 +35,14 @@
   .note{font-size:12px;color:#9aa0a6}
   .warn{color:var(--warn)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mask-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 14px;
+    background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.7) 41%);
+    mix-blend-mode: multiply;
+  }
 </style>
 </head>
 <body>
@@ -43,6 +50,7 @@
   <main>
     <div class="stage">
       <canvas id="heat"></canvas>
+      <div class="mask-overlay"></div>
       <div id="nosrc" class="nosrc">Click <b>Start Camera</b> (HTTPS required)</div>
       <div id="hud" class="hud">motion: 0.00 • fps: —</div>
     </div>
@@ -54,9 +62,14 @@
       <button id="startCam" class="btn">Start Camera</button>
       <button id="stopCam" class="btn">Stop</button>
     </div>
-    <div class="note" style="margin-bottom:10px">If this site isn’t on <b>https://</b> or <b>localhost</b>, your browser will block the camera.</div>
+    <div class="note" style="margin-bottom:10px">If this site isn't on <b>https://</b> or <b>localhost</b>, your browser will block the camera.</div>
 
     <h2>Motion Extraction</h2>
+    <div class="row">
+      <label>Zone Radius (%)</label>
+      <input id="zoneRadius" type="range" min="10" max="80" step="1" value="40">
+      <span id="zoneRadiusV">40</span>
+    </div>
     <div class="row">
       <label>Δt (s)</label>
       <input id="dt" type="range" min="0.1" max="3" step="0.1" value="0.7">
@@ -138,6 +151,7 @@
 
   const ui = {
     startCam:$('startCam'), stopCam:$('stopCam'),
+    zoneRadius:$('zoneRadius'), zoneRadiusV:$('zoneRadiusV'),
     dt:$('dt'), dtV:$('dtV'),
     thr:$('thr'), thrV:$('thrV'),
     sens:$('sens'), sensV:$('sensV'),
@@ -181,7 +195,7 @@
 
   // --- Controls
   function syncVal(r, out){ out.textContent = (r.step && r.step.indexOf('.')>-1) ? (+r.value).toFixed(r.step.split('.')[1].length) : r.value; r.style.setProperty('--p', ((+r.value-(+r.min||0))/((+r.max||100)-(+r.min||0)))*100 + '%'); }
-  ['dt','thr','sens','blur','fade','gainScale','rateRange'].forEach(id=>{
+  ['zoneRadius','dt','thr','sens','blur','fade','gainScale','rateRange'].forEach(id=>{
     const r = ui[id], v = ui[id+'V']; syncVal(r,v); r.addEventListener('input', ()=>syncVal(r,v));
   });
 
@@ -243,7 +257,7 @@
   });
 
   function stopLoops(){
-    [loopA, loopB].forEach(s=>{ try{ s && s.stop(); }catch(_){}} );
+    [loopA, loopB].forEach(s=>{ try{ s && s.stop(); }catch(_){} } );
     loopA=loopB=null; loopPlaying=false;
   }
 
@@ -398,28 +412,49 @@
         const thr = +ui.thr.value;
         const sens = +ui.sens.value;
         const cd = curr.data, pd = prev.data;
+        
+        // Calculate circular zone parameters
+        const zoneRadiusPercent = +ui.zoneRadius.value;
+        const centerX = W / 2;
+        const centerY = H / 2;
+        const radius = Math.min(W, H) * (zoneRadiusPercent / 100);
+        const radiusSquared = radius * radius;
+        
         // Heatmap pass (cheap): write red intensity per pixel where |Δluma| > thr
         const step = 4;
         let changed = 0;
+        let totalPixelsInZone = 0;
         const rowSkip = 1, colSkip = 1; // set >1 to decimate for speed
+        
         for(let y=0; y<H; y+=rowSkip){
           for(let x=0; x<W; x+=colSkip){
-            const i = (y*W + x) * 4;
-            const r=cd[i], g=cd[i+1], b=cd[i+2];
-            const pr=pd[i], pg=pd[i+1], pb=pd[i+2];
-            const l = r*0.2126 + g*0.7152 + b*0.0722;
-            const q = pr*0.2126 + pg*0.7152 + pb*0.0722;
-            const d = Math.abs(l - q);
-            if(d > thr){
-              changed++;
-              const a = Math.min(255, (d-thr) * (2.0 * sens));
-              hctx.fillStyle = `rgba(93,212,255,${Math.min(1, a/255)})`; // cyan heat
-              hctx.fillRect(x, y, 1, 1);
+            // Check if pixel is within circular zone
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distSquared = dx*dx + dy*dy;
+            
+            if(distSquared <= radiusSquared){
+              totalPixelsInZone++;
+              
+              const i = (y*W + x) * 4;
+              const r=cd[i], g=cd[i+1], b=cd[i+2];
+              const pr=pd[i], pg=pd[i+1], pb=pd[i+2];
+              const l = r*0.2126 + g*0.7152 + b*0.0722;
+              const q = pr*0.2126 + pg*0.7152 + pb*0.0722;
+              const d = Math.abs(l - q);
+              
+              if(d > thr){
+                changed++;
+                const a = Math.min(255, (d-thr) * (2.0 * sens));
+                hctx.fillStyle = `rgba(93,212,255,${Math.min(1, a/255)})`; // cyan heat
+                hctx.fillRect(x, y, 1, 1);
+              }
             }
           }
         }
-        // Normalize motion magnitude ~ fraction of pixels changed
-        const m = changed / (W*H/ (rowSkip*colSkip));
+        
+        // Normalize motion magnitude ~ fraction of pixels changed within the circular zone
+        const m = totalPixelsInZone > 0 ? changed / totalPixelsInZone : 0;
         // EMA for stability
         state.motionEMA = state.motionEMA*0.85 + Math.min(1, m*12)*0.15;
 
