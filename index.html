@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Minimal WebGazer Gaze Logger (Fixed)</title>
+  <title>Minimal WebGazer Logger + Calibration</title>
   <style>
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%;
@@ -11,22 +11,20 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* ---- Stimulus container (gradient field) ---- */
     #stimulus {
       position: absolute;
       inset: 0;
-      /* Change to your exact gradient if needed */
       background: linear-gradient(90deg, #0b0b1a 0%, #1d3b7a 25%, #2bb3a3 50%, #f4d35e 75%, #f95738 100%);
+      z-index: 1;
     }
 
-    /* ---- Overlay canvas for AOI / scanpath / dot ---- */
     #overlay {
       position: absolute;
       inset: 0;
       pointer-events: none;
+      z-index: 2;
     }
 
-    /* ---- Start button (minimal) ---- */
     #startBtn {
       position: absolute;
       left: 50%; top: 50%;
@@ -45,18 +43,17 @@
       z-index: 5;
     }
     #startBtn:hover { background: rgba(0,0,0,0.5); }
-    #startBtn:disabled { opacity: 0.6; cursor: default; }
+    #startBtn:disabled { opacity: 0.55; cursor: default; }
 
-    /* ---- Invisible hotspot to reveal panel ---- */
+    /* hotspot to reveal panel */
     #hotspot {
       position: absolute;
       left: 0; top: 0;
-      width: 42px; height: 42px;  /* easier to trigger */
+      width: 44px; height: 44px;
       background: rgba(255,255,255,0.0);
       z-index: 10;
     }
 
-    /* ---- Control panel (hidden unless hover) ---- */
     #panel {
       position: absolute;
       left: 8px; top: 8px;
@@ -73,17 +70,8 @@
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
     }
-    #panel.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    #panel label {
-      display: block;
-      font-size: 12px;
-      opacity: 0.85;
-      margin-top: 8px;
-      margin-bottom: 4px;
-    }
+    #panel.visible { opacity: 1; pointer-events: auto; }
+    #panel label { display:block; font-size: 12px; opacity: 0.85; margin-top: 8px; margin-bottom: 4px; }
     #panel input, #panel select, #panel button {
       width: 100%;
       box-sizing: border-box;
@@ -95,25 +83,12 @@
       font-size: 13px;
       outline: none;
     }
-    #panel button {
-      cursor: pointer;
-      background: rgba(255,255,255,0.10);
-    }
+    #panel button { cursor:pointer; background: rgba(255,255,255,0.10); }
     #panel button:hover { background: rgba(255,255,255,0.14); }
 
-    #row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 8px;
-    }
+    #row { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
 
-    #tiny {
-      margin-top: 8px;
-      font-size: 12px;
-      opacity: 0.8;
-      line-height: 1.3;
-    }
+    #tiny { margin-top: 8px; font-size: 12px; opacity: 0.8; line-height: 1.3; }
     #statusDot {
       display: inline-block;
       width: 8px; height: 8px;
@@ -124,68 +99,117 @@
     }
     .running #statusDot { background: rgba(80,255,170,0.85); }
     .stopped #statusDot { background: rgba(255,220,120,0.85); }
+    .calibrating #statusDot { background: rgba(130,190,255,0.9); }
 
-    /* Hide panel during recording */
-    body.recording #panel { opacity: 0 !important; pointer-events: none !important; }
-    body.recording #hotspot { pointer-events: none; }
+    /* Hide panel during recording or calibration (stimulus purity) */
+    body.recording #panel, body.calibrating #panel {
+      opacity: 0 !important; pointer-events: none !important;
+    }
+    body.recording #hotspot, body.calibrating #hotspot { pointer-events: none; }
+
+    /* ---- Calibration layer ---- */
+    #calibLayer {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      display: none;
+      pointer-events: none; /* enable dots only */
+    }
+    body.calibrating #calibLayer { display: block; }
+
+    .calibDot {
+      position: absolute;
+      width: 22px; height: 22px;
+      border-radius: 999px;
+      transform: translate(-50%, -50%);
+      border: 1px solid rgba(255,255,255,0.65);
+      background: rgba(0,0,0,0.25);
+      box-shadow: 0 0 0 10px rgba(255,255,255,0.06);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .calibDot.done {
+      border-color: rgba(80,255,170,0.9);
+      box-shadow: 0 0 0 10px rgba(80,255,170,0.12);
+    }
+    .calibDot.active {
+      border-color: rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 14px rgba(255,255,255,0.09);
+    }
+    /* tiny progress ring using conic-gradient */
+    .calibDot::after{
+      content:"";
+      position:absolute; inset:-6px;
+      border-radius:999px;
+      background: conic-gradient(rgba(255,255,255,0.65) var(--p,0%), rgba(255,255,255,0.08) 0);
+      -webkit-mask: radial-gradient(circle, transparent 55%, #000 56%);
+              mask: radial-gradient(circle, transparent 55%, #000 56%);
+      opacity: 0.9;
+      pointer-events:none;
+    }
   </style>
 </head>
 <body class="stopped">
   <div id="stimulus"></div>
   <canvas id="overlay"></canvas>
 
-  <button id="startBtn" type="button">Start (30s)</button>
+  <!-- Button is "Calibrate" until calibration completes -->
+  <button id="startBtn" type="button">Calibrate</button>
+
+  <div id="calibLayer" aria-hidden="true"></div>
 
   <div id="hotspot" aria-hidden="true"></div>
   <div id="panel" role="region" aria-label="Controls">
     <label>Participant ID</label>
-    <input id="pid" type="text" placeholder="p01" value="p01" />
+    <input id="pid" type="text" value="p01" />
 
     <label>Condition</label>
-    <input id="cond" type="text" placeholder="baseline / bergamot / blank" value="baseline" />
+    <input id="cond" type="text" value="baseline" />
 
     <label>View Mode</label>
     <select id="viewMode">
-      <option value="none">None (stimulus only)</option>
+      <option value="none">None</option>
       <option value="aoi">AOI Grid (4×4)</option>
-      <option value="scanpath">Scanpath (from recorded)</option>
-      <option value="dot">Raw Dot (last recorded)</option>
+      <option value="scanpath">Scanpath (this trial)</option>
+      <option value="raw">Raw Trail (this trial)</option>
     </select>
 
     <div id="row">
       <button id="downloadJson" type="button">Download JSON</button>
+      <button id="recalibrate" type="button">Recalibrate</button>
+    </div>
+
+    <div id="row" style="margin-top:8px;">
       <button id="clearData" type="button">Clear Data</button>
+      <button id="stopNow" type="button">Stop</button>
     </div>
 
     <div id="tiny">
       <span id="statusDot"></span><span id="statusText">Idle</span><br/>
-      Samples: <span id="sampleCount">0</span>
+      Calib: <span id="calibText">not done</span><br/>
+      Samples (this trial): <span id="sampleCount">0</span>
     </div>
   </div>
 
-  <!-- WebGazer (CDN) -->
   <script src="https://unpkg.com/webgazer@2.1.0/dist/webgazer.js"></script>
 
   <script>
-    // -----------------------------
-    // Minimal WebGazer Gaze Logger (Fixed + Debugged)
-    // -----------------------------
-    // Fixes:
-    // - Disables WebGazer prediction point (red dot): showPredictionPoints(false)
-    // - Fixes overlay drawing issues by removing DPR double-scaling
-    // - Makes Raw Dot + Scanpath render from RECORDED samples (works with camera OFF)
-    // - Ends WebGazer on stop (camera indicator off)
-
+    // --------- Experiment params ----------
     const TRIAL_MS = 30000;
-    const SAMPLE_EVERY_MS = 100;   // 10 Hz
-    const PATH_EVERY_MS = 200;     // downsample scanpath from recorded data
-    const CONF_THRESHOLD = 0.0;    // keep permissive; filter offline if needed
-    const AOI_N = 4;               // 4x4 grid
+    const SAMPLE_EVERY_MS = 100;
+    const AOI_N = 4;
+
+    // --------- Calibration params ----------
+    const CALIB_CLICKS_PER_POINT = 5;
+    // 9 points (like demo): 10/50/90% in both axes
+    const CALIB_PCTS = [10, 50, 90];
 
     const overlay = document.getElementById('overlay');
     const ctx = overlay.getContext('2d');
 
     const startBtn = document.getElementById('startBtn');
+    const calibLayer = document.getElementById('calibLayer');
+
     const hotspot = document.getElementById('hotspot');
     const panel = document.getElementById('panel');
 
@@ -195,35 +219,41 @@
 
     const downloadJsonBtn = document.getElementById('downloadJson');
     const clearDataBtn = document.getElementById('clearData');
+    const recalibrateBtn = document.getElementById('recalibrate');
+    const stopNowBtn = document.getElementById('stopNow');
 
     const statusText = document.getElementById('statusText');
     const sampleCountEl = document.getElementById('sampleCount');
+    const calibTextEl = document.getElementById('calibText');
 
     let isRecording = false;
     let trialStartPerf = null;
-    let trialStopTimeout = null;
+    let sampleTimer = null;
+    let stopTimer = null;
 
     let webgazerReady = false;
+    let latestGaze = null; // live: {x,y,confidence?}
 
-    // Latest gaze from WebGazer listener (live)
-    let latestGaze = null; // {x,y,confidence?}
+    // Per-trial arrays
+    let trialSamples = [];
+    let trialScanpath = [];
 
-    // Data stores
-    const samples = [];     // raw samples for current condition/trial set (you can clear between trials)
-    const scanpath = [];    // derived from recorded samples after stop (stable)
+    // Calibration state
+    let calibrated = false;
+    let calibPoints = [];    // {x,y,pctX,pctY, clicks, done, el}
+    let calibIndex = 0;
 
-    // Timers
-    let sampleTimer = null;
-
-    // Panel hover logic
+    // --------- Panel hover ----------
     let hidePanelTimer = null;
     function showPanel() {
       if (document.body.classList.contains('recording')) return;
+      if (document.body.classList.contains('calibrating')) return;
       panel.classList.add('visible');
       if (hidePanelTimer) clearTimeout(hidePanelTimer);
     }
     function scheduleHidePanel() {
       if (document.body.classList.contains('recording')) return;
+      if (document.body.classList.contains('calibrating')) return;
       if (hidePanelTimer) clearTimeout(hidePanelTimer);
       hidePanelTimer = setTimeout(() => panel.classList.remove('visible'), 180);
     }
@@ -232,32 +262,31 @@
     panel.addEventListener('mouseenter', showPanel);
     panel.addEventListener('mouseleave', scheduleHidePanel);
 
-    // Resize canvas to fit viewport (NO DPR double-scaling)
+    // --------- Canvas sizing ----------
     function resize() {
       overlay.width = window.innerWidth;
       overlay.height = window.innerHeight;
       overlay.style.width = window.innerWidth + 'px';
       overlay.style.height = window.innerHeight + 'px';
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.setTransform(1,0,0,1,0,0);
       redrawOverlay();
+      layoutCalibrationDots(); // keep dots in the right place on resize
     }
     window.addEventListener('resize', resize);
     resize();
 
-    // Utility: get stimulus rect for relative coords
     function getStimulusRect() {
       return document.getElementById('stimulus').getBoundingClientRect();
     }
-
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-    // AOI computation: 4x4 grid over stimulus rect
     function computeAOI(xRel, yRel, w, h) {
       const col = clamp(Math.floor((xRel / w) * AOI_N), 0, AOI_N - 1);
       const row = clamp(Math.floor((yRel / h) * AOI_N), 0, AOI_N - 1);
       return { row, col, id: row * AOI_N + col };
     }
 
+    // --------- WebGazer init ----------
     async function initWebGazerOnce() {
       if (webgazerReady) return;
 
@@ -270,65 +299,216 @@
         };
       });
 
-      // Start the model (camera permission happens here)
       await webgazer.begin();
 
-      // Disable ALL built-in visual feedback (including the red dot)
-      if (typeof webgazer.showPredictionPoints === 'function') {
-        webgazer.showPredictionPoints(false);
-      }
+      // Turn OFF all built-in visuals (red dot included)
+      if (typeof webgazer.showPredictionPoints === 'function') webgazer.showPredictionPoints(false);
       webgazer.showVideo(false);
       webgazer.showFaceOverlay(false);
       webgazer.showFaceFeedbackBox(false);
 
-      // Use a stable regression/tracker
       if (typeof webgazer.setRegression === 'function') webgazer.setRegression('ridge');
       if (typeof webgazer.setTracker === 'function') webgazer.setTracker('clmtrackr');
 
       webgazerReady = true;
     }
 
-    // Recording controls
+    function hardStopWebgazer() {
+      try { webgazer.end(); } catch(e) {}
+      webgazerReady = false;
+      latestGaze = null;
+    }
+
+    // --------- Calibration UI ----------
+    function buildCalibrationDots() {
+      calibLayer.innerHTML = '';
+      calibPoints = [];
+      calibIndex = 0;
+
+      for (const py of CALIB_PCTS) {
+        for (const px of CALIB_PCTS) {
+          const el = document.createElement('div');
+          el.className = 'calibDot';
+          el.dataset.px = String(px);
+          el.dataset.py = String(py);
+          el.style.setProperty('--p', '0%');
+          el.addEventListener('click', onCalibDotClick);
+          calibLayer.appendChild(el);
+
+          calibPoints.push({
+            pctX: px, pctY: py,
+            x: 0, y: 0,
+            clicks: 0,
+            done: false,
+            el
+          });
+        }
+      }
+      layoutCalibrationDots();
+      updateActiveCalibDot();
+    }
+
+    function layoutCalibrationDots() {
+      if (!calibPoints.length) return;
+      // Place dots relative to the viewport (like demo)
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+
+      for (const p of calibPoints) {
+        p.x = Math.round((p.pctX / 100) * W);
+        p.y = Math.round((p.pctY / 100) * H);
+        p.el.style.left = p.x + 'px';
+        p.el.style.top  = p.y + 'px';
+      }
+    }
+
+    function updateActiveCalibDot() {
+      calibPoints.forEach((p, i) => {
+        p.el.classList.toggle('active', i === calibIndex && !p.done);
+      });
+    }
+
+    function onCalibDotClick(e) {
+      // only accept clicks on current active dot
+      const p = calibPoints[calibIndex];
+      if (!p) return;
+      if (e.currentTarget !== p.el) return;
+
+      // Feed training data explicitly (this is the key demo mechanism)
+      // WebGazer API: recordScreenPosition(x,y,[eventType])
+      if (typeof webgazer.recordScreenPosition === 'function') {
+        webgazer.recordScreenPosition(p.x, p.y, 'click');
+      }
+
+      p.clicks += 1;
+      const prog = Math.min(1, p.clicks / CALIB_CLICKS_PER_POINT);
+      p.el.style.setProperty('--p', (prog * 100).toFixed(0) + '%');
+
+      if (p.clicks >= CALIB_CLICKS_PER_POINT) {
+        p.done = true;
+        p.el.classList.add('done');
+        p.el.classList.remove('active');
+        // advance to next unfinished point
+        let next = calibIndex + 1;
+        while (next < calibPoints.length && calibPoints[next].done) next++;
+        calibIndex = next;
+
+        if (calibIndex >= calibPoints.length) {
+          finishCalibration();
+        } else {
+          updateActiveCalibDot();
+        }
+      }
+    }
+
+    async function beginCalibration() {
+      if (isRecording) return;
+
+      startBtn.disabled = true;
+      startBtn.textContent = 'Calibrating...';
+
+      try {
+        await initWebGazerOnce();
+      } catch (e) {
+        console.error(e);
+        startBtn.disabled = false;
+        startBtn.textContent = 'Calibrate';
+        alert('WebGazer init failed. Check camera permissions.');
+        return;
+      }
+
+      // Enter calibration mode (hide panel; show dots)
+      document.body.classList.remove('stopped', 'running', 'recording');
+      document.body.classList.add('calibrating');
+      statusText.textContent = 'Calibrating…';
+
+      calibrated = false;
+      calibTextEl.textContent = 'in progress';
+
+      buildCalibrationDots();
+      // keep start button hidden during calibration (less distraction)
+      startBtn.style.display = 'none';
+    }
+
+    function finishCalibration() {
+      calibrated = true;
+      document.body.classList.remove('calibrating');
+      document.body.classList.add('stopped');
+      statusText.textContent = 'Idle';
+      calibTextEl.textContent = 'done';
+
+      // Show start button for trials
+      startBtn.style.display = 'block';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start (30s)';
+
+      // Clear calibration dots
+      calibLayer.innerHTML = '';
+    }
+
+    function resetCalibration() {
+      calibrated = false;
+      calibTextEl.textContent = 'not done';
+      // Keep WebGazer cleared for a clean recalibration (optional but usually helps)
+      try { webgazer.clearData(); } catch(e) {}
+      hardStopWebgazer();
+
+      // Button becomes "Calibrate" again
+      startBtn.style.display = 'block';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Calibrate';
+
+      // Ensure we're not stuck in a mode
+      document.body.classList.remove('calibrating');
+      calibLayer.innerHTML = '';
+      redrawOverlay();
+    }
+
+    // --------- Trial recording ----------
     async function startTrial() {
       if (isRecording) return;
+      if (!calibrated) {
+        await beginCalibration();
+        return;
+      }
 
       startBtn.disabled = true;
       startBtn.textContent = 'Starting...';
 
       try {
-        // Ensure webgazer is running (permission prompt may appear)
+        // WebGazer was ended after last trial; re-init
         await initWebGazerOnce();
       } catch (e) {
         console.error(e);
         startBtn.disabled = false;
         startBtn.textContent = 'Start (30s)';
-        alert('Camera permission / WebGazer init failed. Check browser permissions and try again.');
+        alert('WebGazer init failed. Check camera permissions.');
         return;
       }
 
-      // Lock down stimulus purity
+      // Clear per-trial data
+      trialSamples = [];
+      trialScanpath = [];
+      sampleCountEl.textContent = '0';
+
       isRecording = true;
       document.body.classList.add('recording');
       document.body.classList.remove('stopped');
       document.body.classList.add('running');
       statusText.textContent = 'Recording…';
 
-      // Hide start button immediately
       startBtn.style.display = 'none';
-
-      // Force overlays off while recording
       viewModeEl.value = 'none';
       redrawOverlay();
 
       trialStartPerf = performance.now();
 
-      // Sample timer: log gaze at fixed cadence
       sampleTimer = setInterval(() => {
-        const rect = getStimulusRect();
-        const nowPerf = performance.now();
-        const t_ms = Math.round(nowPerf - trialStartPerf);
+        const r = getStimulusRect();
+        const t_ms = Math.round(performance.now() - trialStartPerf);
 
-        let x = null, y = null, conf = null, valid = false;
+        let x = null, y = null, conf = null;
+        let valid = false;
         let x_rel = null, y_rel = null, x_norm = null, y_norm = null;
         let aoi = null;
 
@@ -337,22 +517,21 @@
           y = latestGaze.y;
           conf = latestGaze.confidence;
 
-          x_rel = x - rect.left;
-          y_rel = y - rect.top;
+          x_rel = x - r.left;
+          y_rel = y - r.top;
 
-          const inBounds = (x_rel >= 0 && x_rel <= rect.width && y_rel >= 0 && y_rel <= rect.height);
-          const passConf = (conf == null) ? true : (conf >= CONF_THRESHOLD);
-          valid = inBounds && passConf;
+          const inBounds = (x_rel >= 0 && x_rel <= r.width && y_rel >= 0 && y_rel <= r.height);
+          valid = inBounds;
 
           if (valid) {
-            x_norm = x_rel / rect.width;
-            y_norm = y_rel / rect.height;
-            const a = computeAOI(x_rel, y_rel, rect.width, rect.height);
+            x_norm = x_rel / r.width;
+            y_norm = y_rel / r.height;
+            const a = computeAOI(x_rel, y_rel, r.width, r.height);
             aoi = { id: a.id, row: a.row, col: a.col, n: AOI_N };
           }
         }
 
-        samples.push({
+        trialSamples.push({
           participant_id: pidEl.value.trim() || null,
           condition: condEl.value.trim() || null,
           t_ms,
@@ -367,11 +546,10 @@
           aoi
         });
 
-        sampleCountEl.textContent = String(samples.length);
+        sampleCountEl.textContent = String(trialSamples.length);
       }, SAMPLE_EVERY_MS);
 
-      // Auto-stop after 30s
-      trialStopTimeout = setTimeout(stopTrial, TRIAL_MS);
+      stopTimer = setTimeout(stopTrial, TRIAL_MS);
     }
 
     function stopTrial() {
@@ -384,30 +562,21 @@
       statusText.textContent = 'Stopped';
 
       if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
-      if (trialStopTimeout) { clearTimeout(trialStopTimeout); trialStopTimeout = null; }
+      if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
 
-      // Build a stable scanpath from recorded samples (so it works even after camera off)
-      scanpath.length = 0;
+      // Build scanpath from this trial only (downsample ~200ms)
+      trialScanpath = [];
       let lastT = -Infinity;
-
-      for (const s of samples) {
-        if (!s.valid) continue;
-        if (typeof s.x_rel_px !== 'number' || typeof s.y_rel_px !== 'number') continue;
-        if (s.t_ms - lastT < PATH_EVERY_MS) continue;
-        scanpath.push({ t_ms: s.t_ms, x_rel_px: s.x_rel_px, y_rel_px: s.y_rel_px });
+      for (const s of trialSamples) {
+        if (!s.valid || typeof s.x_px !== 'number' || typeof s.y_px !== 'number') continue;
+        if (s.t_ms - lastT < 200) continue;
+        trialScanpath.push({ t_ms: s.t_ms, x_px: s.x_px, y_px: s.y_px });
         lastT = s.t_ms;
       }
 
-      // Turn camera OFF after each trial
-      try {
-        webgazer.end();
-      } catch (e) {
-        // ignore
-      }
-      webgazerReady = false; // allow re-init next trial
-      latestGaze = null;
+      // Turn camera off after each trial (so indicator stops)
+      hardStopWebgazer();
 
-      // Show start button again
       startBtn.style.display = 'block';
       startBtn.disabled = false;
       startBtn.textContent = 'Start (30s)';
@@ -415,81 +584,82 @@
       redrawOverlay();
     }
 
-    startBtn.addEventListener('click', startTrial);
-
-    // Overlay rendering
+    // --------- Overlay drawing ----------
     function clearCanvas() {
-      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      ctx.clearRect(0,0,overlay.width,overlay.height);
     }
 
     function drawAOIGrid() {
-      const rect = getStimulusRect();
+      const r = getStimulusRect();
       ctx.save();
-      ctx.translate(rect.left, rect.top);
       ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
 
-      // More visible for debugging; reduce alpha later if you want
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      const cellW = r.width / AOI_N;
+      const cellH = r.height / AOI_N;
 
-      for (let i = 1; i < AOI_N; i++) {
-        const x = (rect.width / AOI_N) * i;
-        const y = (rect.height / AOI_N) * i;
+      ctx.strokeRect(r.left, r.top, r.width, r.height);
+
+      for (let i=1; i<AOI_N; i++) {
+        const x = r.left + cellW * i;
+        const y = r.top  + cellH * i;
 
         ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, rect.height);
+        ctx.moveTo(x, r.top);
+        ctx.lineTo(x, r.top + r.height);
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(rect.width, y);
+        ctx.moveTo(r.left, y);
+        ctx.lineTo(r.left + r.width, y);
         ctx.stroke();
       }
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-      ctx.strokeRect(0, 0, rect.width, rect.height);
       ctx.restore();
     }
 
-    function drawRawDotFromRecorded() {
-      const rect = getStimulusRect();
-
-      // last valid recorded point
-      for (let i = samples.length - 1; i >= 0; i--) {
-        const s = samples[i];
-        if (!s || !s.valid) continue;
-        if (typeof s.x_rel_px !== 'number' || typeof s.y_rel_px !== 'number') continue;
-
-        ctx.save();
-        ctx.translate(rect.left, rect.top);
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.beginPath();
-        ctx.arc(s.x_rel_px, s.y_rel_px, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        return;
+    function drawRawTrail() {
+      const pts = [];
+      for (let i = trialSamples.length - 1; i >= 0 && pts.length < 120; i--) {
+        const s = trialSamples[i];
+        if (s && s.valid && typeof s.x_px === 'number' && typeof s.y_px === 'number') {
+          pts.push({x: s.x_px, y: s.y_px});
+        }
       }
-    }
-
-    function drawScanpathFromRecorded() {
-      const rect = getStimulusRect();
-      if (scanpath.length < 2) return;
+      if (pts.length < 2) return;
 
       ctx.save();
-      ctx.translate(rect.left, rect.top);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
-      ctx.moveTo(scanpath[0].x_rel_px, scanpath[0].y_rel_px);
-      for (let i = 1; i < scanpath.length; i++) {
-        ctx.lineTo(scanpath[i].x_rel_px, scanpath[i].y_rel_px);
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i=1; i<pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, 5, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawScanpath() {
+      if (trialScanpath.length < 2) return;
+
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+      ctx.beginPath();
+      ctx.moveTo(trialScanpath[0].x_px, trialScanpath[0].y_px);
+      for (let i=1; i<trialScanpath.length; i++) {
+        ctx.lineTo(trialScanpath[i].x_px, trialScanpath[i].y_px);
       }
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      for (let i = 0; i < scanpath.length; i += 4) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      for (let i=0; i<trialScanpath.length; i+=3) {
         ctx.beginPath();
-        ctx.arc(scanpath[i].x_rel_px, scanpath[i].y_rel_px, 3, 0, Math.PI * 2);
+        ctx.arc(trialScanpath[i].x_px, trialScanpath[i].y_px, 3, 0, Math.PI*2);
         ctx.fill();
       }
       ctx.restore();
@@ -497,33 +667,37 @@
 
     function redrawOverlay() {
       clearCanvas();
-
-      // Never draw overlays while recording (stimulus purity)
       if (document.body.classList.contains('recording')) return;
+      if (document.body.classList.contains('calibrating')) return;
 
       const mode = viewModeEl.value;
       if (mode === 'aoi') drawAOIGrid();
-      if (mode === 'scanpath') drawScanpathFromRecorded();
-      if (mode === 'dot') drawRawDotFromRecorded();
+      if (mode === 'raw') drawRawTrail();
+      if (mode === 'scanpath') drawScanpath();
     }
 
     viewModeEl.addEventListener('change', redrawOverlay);
 
-    // Download JSON
+    // --------- Download / Clear ----------
     function downloadJSON() {
       const meta = {
         exported_at_iso: new Date().toISOString(),
+        calibrated,
+        calib_clicks_per_point: CALIB_CLICKS_PER_POINT,
         trial_ms: TRIAL_MS,
         sample_every_ms: SAMPLE_EVERY_MS,
-        scanpath_every_ms: PATH_EVERY_MS,
         aoi_grid_n: AOI_N,
-        stimulus: {
-          width_px: getStimulusRect().width,
-          height_px: getStimulusRect().height
+        stimulus_rect: getStimulusRect()
+      };
+      const payload = {
+        meta,
+        trial: {
+          participant_id: pidEl.value.trim() || null,
+          condition: condEl.value.trim() || null,
+          samples: trialSamples,
+          scanpath: trialScanpath
         }
       };
-
-      const payload = { meta, samples, scanpath };
 
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -539,21 +713,47 @@
 
     downloadJsonBtn.addEventListener('click', downloadJSON);
 
-    // Clear data
     clearDataBtn.addEventListener('click', () => {
       if (isRecording) return;
-      samples.length = 0;
-      scanpath.length = 0;
+      if (document.body.classList.contains('calibrating')) return;
+      trialSamples = [];
+      trialScanpath = [];
       sampleCountEl.textContent = '0';
       redrawOverlay();
     });
 
-    // Safety: stop if user leaves tab
+    // --------- Buttons ----------
+    startBtn.addEventListener('click', () => {
+      if (!calibrated) beginCalibration();
+      else startTrial();
+    });
+
+    recalibrateBtn.addEventListener('click', () => {
+      if (isRecording) return;
+      resetCalibration();
+      beginCalibration();
+    });
+
+    stopNowBtn.addEventListener('click', () => {
+      if (isRecording) stopTrial();
+      else hardStopWebgazer();
+    });
+
+    // Stop on tab hide
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && isRecording) stopTrial();
     });
 
-    // Initial draw
+    // Initial UI state
+    function setInitial() {
+      calibrated = false;
+      calibTextEl.textContent = 'not done';
+      statusText.textContent = 'Idle';
+      startBtn.textContent = 'Calibrate';
+      startBtn.disabled = false;
+      startBtn.style.display = 'block';
+    }
+    setInitial();
     redrawOverlay();
   </script>
 </body>
