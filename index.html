@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Minimal WebGazer Gaze Logger</title>
+  <title>Minimal WebGazer Gaze Logger (Fixed)</title>
   <style>
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%;
@@ -15,7 +15,7 @@
     #stimulus {
       position: absolute;
       inset: 0;
-      /* You can change this to your exact gradient */
+      /* Change to your exact gradient if needed */
       background: linear-gradient(90deg, #0b0b1a 0%, #1d3b7a 25%, #2bb3a3 50%, #f4d35e 75%, #f95738 100%);
     }
 
@@ -42,15 +42,16 @@
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
       user-select: none;
+      z-index: 5;
     }
     #startBtn:hover { background: rgba(0,0,0,0.5); }
+    #startBtn:disabled { opacity: 0.6; cursor: default; }
 
     /* ---- Invisible hotspot to reveal panel ---- */
     #hotspot {
       position: absolute;
       left: 0; top: 0;
-      width: 26px; height: 26px;
-      /* invisible */
+      width: 42px; height: 42px;  /* easier to trigger */
       background: rgba(255,255,255,0.0);
       z-index: 10;
     }
@@ -127,7 +128,6 @@
     /* Hide panel during recording */
     body.recording #panel { opacity: 0 !important; pointer-events: none !important; }
     body.recording #hotspot { pointer-events: none; }
-
   </style>
 </head>
 <body class="stopped">
@@ -148,8 +148,8 @@
     <select id="viewMode">
       <option value="none">None (stimulus only)</option>
       <option value="aoi">AOI Grid (4×4)</option>
-      <option value="scanpath">Scanpath</option>
-      <option value="dot">Raw Dot</option>
+      <option value="scanpath">Scanpath (from recorded)</option>
+      <option value="dot">Raw Dot (last recorded)</option>
     </select>
 
     <div id="row">
@@ -168,17 +168,18 @@
 
   <script>
     // -----------------------------
-    // Minimal WebGazer Gaze Logger
+    // Minimal WebGazer Gaze Logger (Fixed + Debugged)
     // -----------------------------
-    // Notes:
-    // - Keeps UI invisible during recording (stimulus purity).
-    // - Records raw samples (t,x,y,conf + normalized coords + AOI id).
-    // - View modes are purely for analysis overlays, not for participants.
+    // Fixes:
+    // - Disables WebGazer prediction point (red dot): showPredictionPoints(false)
+    // - Fixes overlay drawing issues by removing DPR double-scaling
+    // - Makes Raw Dot + Scanpath render from RECORDED samples (works with camera OFF)
+    // - Ends WebGazer on stop (camera indicator off)
 
     const TRIAL_MS = 30000;
-    const SAMPLE_EVERY_MS = 100;   // 10 Hz; stable enough for distribution work
-    const PATH_EVERY_MS = 200;     // scanpath downsample
-    const CONF_THRESHOLD = 0.0;    // webgazer confidence can be spotty; filter offline if needed
+    const SAMPLE_EVERY_MS = 100;   // 10 Hz
+    const PATH_EVERY_MS = 200;     // downsample scanpath from recorded data
+    const CONF_THRESHOLD = 0.0;    // keep permissive; filter offline if needed
     const AOI_N = 4;               // 4x4 grid
 
     const overlay = document.getElementById('overlay');
@@ -202,16 +203,17 @@
     let trialStartPerf = null;
     let trialStopTimeout = null;
 
-    // Latest gaze from WebGazer listener
-    let latestGaze = null; // {x,y,t,confidence?}
+    let webgazerReady = false;
+
+    // Latest gaze from WebGazer listener (live)
+    let latestGaze = null; // {x,y,confidence?}
 
     // Data stores
-    const samples = [];     // raw samples
-    const scanpath = [];    // downsampled points for visualization
+    const samples = [];     // raw samples for current condition/trial set (you can clear between trials)
+    const scanpath = [];    // derived from recorded samples after stop (stable)
 
     // Timers
     let sampleTimer = null;
-    let pathTimer = null;
 
     // Panel hover logic
     let hidePanelTimer = null;
@@ -230,14 +232,14 @@
     panel.addEventListener('mouseenter', showPanel);
     panel.addEventListener('mouseleave', scheduleHidePanel);
 
-    // Resize canvas to fit viewport
+    // Resize canvas to fit viewport (NO DPR double-scaling)
     function resize() {
-      overlay.width = window.innerWidth * devicePixelRatio;
-      overlay.height = window.innerHeight * devicePixelRatio;
+      overlay.width = window.innerWidth;
+      overlay.height = window.innerHeight;
       overlay.style.width = window.innerWidth + 'px';
       overlay.style.height = window.innerHeight + 'px';
-      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      redrawOverlay(); // refresh on resize
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      redrawOverlay();
     }
     window.addEventListener('resize', resize);
     resize();
@@ -256,46 +258,46 @@
       return { row, col, id: row * AOI_N + col };
     }
 
-    // WebGazer init (minimal)
-    async function initWebGazer() {
-      // Safety: avoid WebGazer injecting video previews and overlays
-      webgazer.setGazeListener((data, timestamp) => {
+    async function initWebGazerOnce() {
+      if (webgazerReady) return;
+
+      webgazer.setGazeListener((data) => {
         if (!data) return;
-        // data.x/data.y are viewport coords
         latestGaze = {
           x: data.x,
           y: data.y,
-          t: timestamp,
           confidence: (typeof data.confidence === 'number') ? data.confidence : null
         };
       });
 
-      // Reduce UI noise from webgazer
+      // Start the model (camera permission happens here)
+      await webgazer.begin();
+
+      // Disable ALL built-in visual feedback (including the red dot)
+      if (typeof webgazer.showPredictionPoints === 'function') {
+        webgazer.showPredictionPoints(false);
+      }
       webgazer.showVideo(false);
       webgazer.showFaceOverlay(false);
       webgazer.showFaceFeedbackBox(false);
 
-      // Start the model; camera permission happens here
-      await webgazer.begin();
+      // Use a stable regression/tracker
+      if (typeof webgazer.setRegression === 'function') webgazer.setRegression('ridge');
+      if (typeof webgazer.setTracker === 'function') webgazer.setTracker('clmtrackr');
 
-      // Optional: make predictions steadier
-      webgazer.setRegression('ridge'); // common default
-      webgazer.setTracker('clmtrackr');
-
-      // Give it a moment
-      await new Promise(r => setTimeout(r, 500));
+      webgazerReady = true;
     }
 
     // Recording controls
     async function startTrial() {
       if (isRecording) return;
 
-      // Ensure webgazer running (permission prompt may appear)
       startBtn.disabled = true;
       startBtn.textContent = 'Starting...';
 
       try {
-        await initWebGazer();
+        // Ensure webgazer is running (permission prompt may appear)
+        await initWebGazerOnce();
       } catch (e) {
         console.error(e);
         startBtn.disabled = false;
@@ -311,14 +313,13 @@
       document.body.classList.add('running');
       statusText.textContent = 'Recording…';
 
-      // Hide start button
+      // Hide start button immediately
       startBtn.style.display = 'none';
 
-      // Force analysis overlays off while recording
+      // Force overlays off while recording
       viewModeEl.value = 'none';
       redrawOverlay();
 
-      // Start timers
       trialStartPerf = performance.now();
 
       // Sample timer: log gaze at fixed cadence
@@ -336,13 +337,11 @@
           y = latestGaze.y;
           conf = latestGaze.confidence;
 
-          // Relative to stimulus rect
           x_rel = x - rect.left;
           y_rel = y - rect.top;
 
           const inBounds = (x_rel >= 0 && x_rel <= rect.width && y_rel >= 0 && y_rel <= rect.height);
           const passConf = (conf == null) ? true : (conf >= CONF_THRESHOLD);
-
           valid = inBounds && passConf;
 
           if (valid) {
@@ -371,27 +370,8 @@
         sampleCountEl.textContent = String(samples.length);
       }, SAMPLE_EVERY_MS);
 
-      // Scanpath timer: downsample latest valid point
-      pathTimer = setInterval(() => {
-        const rect = getStimulusRect();
-        if (!latestGaze) return;
-
-        const x = latestGaze.x;
-        const y = latestGaze.y;
-        const x_rel = x - rect.left;
-        const y_rel = y - rect.top;
-        const inBounds = (x_rel >= 0 && x_rel <= rect.width && y_rel >= 0 && y_rel <= rect.height);
-        if (!inBounds) return;
-
-        const nowPerf = performance.now();
-        const t_ms = Math.round(nowPerf - trialStartPerf);
-
-        scanpath.push({ t_ms, x_rel_px: x_rel, y_rel_px: y_rel });
-      }, PATH_EVERY_MS);
-
-      // Auto-stop
+      // Auto-stop after 30s
       trialStopTimeout = setTimeout(stopTrial, TRIAL_MS);
-
     }
 
     function stopTrial() {
@@ -404,18 +384,34 @@
       statusText.textContent = 'Stopped';
 
       if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
-      if (pathTimer) { clearInterval(pathTimer); pathTimer = null; }
       if (trialStopTimeout) { clearTimeout(trialStopTimeout); trialStopTimeout = null; }
 
-      // Keep webgazer running; you can stop it manually if you want:
-      // webgazer.end();
+      // Build a stable scanpath from recorded samples (so it works even after camera off)
+      scanpath.length = 0;
+      let lastT = -Infinity;
 
-      // Show start button again for next trial
+      for (const s of samples) {
+        if (!s.valid) continue;
+        if (typeof s.x_rel_px !== 'number' || typeof s.y_rel_px !== 'number') continue;
+        if (s.t_ms - lastT < PATH_EVERY_MS) continue;
+        scanpath.push({ t_ms: s.t_ms, x_rel_px: s.x_rel_px, y_rel_px: s.y_rel_px });
+        lastT = s.t_ms;
+      }
+
+      // Turn camera OFF after each trial
+      try {
+        webgazer.end();
+      } catch (e) {
+        // ignore
+      }
+      webgazerReady = false; // allow re-init next trial
+      latestGaze = null;
+
+      // Show start button again
       startBtn.style.display = 'block';
       startBtn.disabled = false;
       startBtn.textContent = 'Start (30s)';
 
-      // Overlays remain off unless you open panel and switch view mode
       redrawOverlay();
     }
 
@@ -431,11 +427,14 @@
       ctx.save();
       ctx.translate(rect.left, rect.top);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+
+      // More visible for debugging; reduce alpha later if you want
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
 
       for (let i = 1; i < AOI_N; i++) {
         const x = (rect.width / AOI_N) * i;
         const y = (rect.height / AOI_N) * i;
+
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, rect.height);
@@ -446,29 +445,33 @@
         ctx.lineTo(rect.width, y);
         ctx.stroke();
       }
-      // border
-      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
       ctx.strokeRect(0, 0, rect.width, rect.height);
       ctx.restore();
     }
 
-    function drawRawDot() {
-      if (!latestGaze) return;
+    function drawRawDotFromRecorded() {
       const rect = getStimulusRect();
-      const x_rel = latestGaze.x - rect.left;
-      const y_rel = latestGaze.y - rect.top;
-      if (x_rel < 0 || y_rel < 0 || x_rel > rect.width || y_rel > rect.height) return;
 
-      ctx.save();
-      ctx.translate(rect.left, rect.top);
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.beginPath();
-      ctx.arc(x_rel, y_rel, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      // last valid recorded point
+      for (let i = samples.length - 1; i >= 0; i--) {
+        const s = samples[i];
+        if (!s || !s.valid) continue;
+        if (typeof s.x_rel_px !== 'number' || typeof s.y_rel_px !== 'number') continue;
+
+        ctx.save();
+        ctx.translate(rect.left, rect.top);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath();
+        ctx.arc(s.x_rel_px, s.y_rel_px, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+      }
     }
 
-    function drawScanpath() {
+    function drawScanpathFromRecorded() {
       const rect = getStimulusRect();
       if (scanpath.length < 2) return;
 
@@ -483,9 +486,8 @@
       }
       ctx.stroke();
 
-      // draw nodes sparsely
       ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      for (let i = 0; i < scanpath.length; i += 5) {
+      for (let i = 0; i < scanpath.length; i += 4) {
         ctx.beginPath();
         ctx.arc(scanpath[i].x_rel_px, scanpath[i].y_rel_px, 3, 0, Math.PI * 2);
         ctx.fill();
@@ -501,16 +503,9 @@
 
       const mode = viewModeEl.value;
       if (mode === 'aoi') drawAOIGrid();
-      if (mode === 'scanpath') drawScanpath();
-      if (mode === 'dot') drawRawDot();
+      if (mode === 'scanpath') drawScanpathFromRecorded();
+      if (mode === 'dot') drawRawDotFromRecorded();
     }
-
-    // Repaint overlay at a modest rate when not recording, so dot updates
-    setInterval(() => {
-      if (document.body.classList.contains('recording')) return;
-      const mode = viewModeEl.value;
-      if (mode === 'dot') redrawOverlay();
-    }, 60);
 
     viewModeEl.addEventListener('change', redrawOverlay);
 
@@ -524,16 +519,11 @@
         aoi_grid_n: AOI_N,
         stimulus: {
           width_px: getStimulusRect().width,
-          height_px: getStimulusRect().height,
-          devicePixelRatio
+          height_px: getStimulusRect().height
         }
       };
 
-      const payload = {
-        meta,
-        samples,
-        scanpath
-      };
+      const payload = { meta, samples, scanpath };
 
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
