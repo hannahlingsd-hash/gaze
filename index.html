@@ -223,22 +223,7 @@
     </div>
   </div>
 
-  <!-- WebGazer v2.1.0 — try jsdelivr, then unpkg -->
-  <script>
-    window._webgazerLoadError = false;
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/webgazer@2.1.0/dist/webgazer.js"
-          onerror="window._webgazerLoadError=true;loadWebgazerFallback()"></script>
-  <script>
-    function loadWebgazerFallback() {
-      var s = document.createElement('script');
-      s.src = 'https://unpkg.com/webgazer@2.1.0/dist/webgazer.js';
-      s.onerror = function() {
-        document.body.innerHTML = '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;font-family:system-ui;text-align:center;padding:24px;box-sizing:border-box;background:#111"><h2 style="margin:0">WebGazer failed to load</h2><p style="opacity:0.7;margin:0">Could not reach CDN. Try:<br><br>1. Check your internet connection<br>2. Disable ad blockers / privacy extensions<br>3. <a href="https://github.com/brownhci/WebGazer/releases" style="color:#7cf" target="_blank">Download webgazer.js</a> and place it next to this HTML file, then change the script src to <code>./webgazer.js</code></p></div>';
-      };
-      document.head.appendChild(s);
-    }
-  </script>
+  <script src="webgazer.js"></script>
 
   <script>
     // --------- Experiment params ----------
