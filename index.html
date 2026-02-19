@@ -1,489 +1,570 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Live Motion → Sound Remix</title>
-<style>
-  :root {
-    --bg:#0b0b0c; --fg:#e9e9ee; --mut:#9aa0a6; --acc:#5dd4ff; --warn:#ff6b6b;
-    --colR:320px; --track:#40424a; --fill:#e9e9ee;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:linear-gradient(180deg,#0b0b0c,#14141a);color:var(--fg);font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial}
-  .wrap{display:grid;grid-template-columns:minmax(0,1fr) var(--colR);gap:14px;height:100vh;padding:12px}
-  main{min-width:0;display:flex;align-items:center;justify-content:center}
-  .stage{position:relative;width:100%;height:100%;aspect-ratio:16/9;border:1px solid #1f2026;border-radius:14px;overflow:hidden;background:#000}
-  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-  #heat{mix-blend-mode:screen}
-  .hud{
-    position:absolute;left:10px;bottom:10px;background:rgba(0,0,0,.55);
-    padding:6px 10px;border:1px solid #2a2b33;border-radius:10px;font:12px ui-monospace;color:#cfd3dc
-  }
-  .nosrc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9297a3;font:12px ui-monospace}
-  aside{overflow:auto;padding-right:8px}
-  h2{margin:10px 0 6px;font-size:12px;color:#cbd0da;letter-spacing:.06em;text-transform:uppercase}
-  .row{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:center;margin:6px 0}
-  .row>label{color:#cbd0da}
-  input[type="range"]{appearance:none;height:2px;background:linear-gradient(90deg,var(--fill) 0 var(--p,0%),var(--track) var(--p,0%) 100%)}
-  input[type="range"]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;background:#fff;border:1px solid #111;border-radius:0}
-  input[type="file"]{width:100%}
-  .btn{appearance:none;background:#17181e;color:#fff;border:1px solid #2c2d36;padding:6px 10px;cursor:pointer}
-  .btn:disabled{opacity:.5;cursor:not-allowed}
-  .mut{color:var(--mut)}
-  .pill{display:inline-block;padding:2px 6px;border:1px solid #32333c;border-radius:999px;font:11px ui-monospace;color:#cfd3dc}
-  .note{font-size:12px;color:#9aa0a6}
-  .warn{color:var(--warn)}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .mask-overlay {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    border-radius: 14px;
-    background: radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.7) 41%);
-    mix-blend-mode: multiply;
-  }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Minimal WebGazer Gaze Logger</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: #000;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* ---- Stimulus container (gradient field) ---- */
+    #stimulus {
+      position: absolute;
+      inset: 0;
+      /* You can change this to your exact gradient */
+      background: linear-gradient(90deg, #0b0b1a 0%, #1d3b7a 25%, #2bb3a3 50%, #f4d35e 75%, #f95738 100%);
+    }
+
+    /* ---- Overlay canvas for AOI / scanpath / dot ---- */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* ---- Start button (minimal) ---- */
+    #startBtn {
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 14px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.35);
+      color: rgba(255,255,255,0.9);
+      font-size: 16px;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      user-select: none;
+    }
+    #startBtn:hover { background: rgba(0,0,0,0.5); }
+
+    /* ---- Invisible hotspot to reveal panel ---- */
+    #hotspot {
+      position: absolute;
+      left: 0; top: 0;
+      width: 26px; height: 26px;
+      /* invisible */
+      background: rgba(255,255,255,0.0);
+      z-index: 10;
+    }
+
+    /* ---- Control panel (hidden unless hover) ---- */
+    #panel {
+      position: absolute;
+      left: 8px; top: 8px;
+      width: 280px;
+      padding: 10px 10px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.92);
+      z-index: 11;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    #panel.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #panel label {
+      display: block;
+      font-size: 12px;
+      opacity: 0.85;
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+    #panel input, #panel select, #panel button {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.92);
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+    #panel button {
+      cursor: pointer;
+      background: rgba(255,255,255,0.10);
+    }
+    #panel button:hover { background: rgba(255,255,255,0.14); }
+
+    #row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    #tiny {
+      margin-top: 8px;
+      font-size: 12px;
+      opacity: 0.8;
+      line-height: 1.3;
+    }
+    #statusDot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.25);
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .running #statusDot { background: rgba(80,255,170,0.85); }
+    .stopped #statusDot { background: rgba(255,220,120,0.85); }
+
+    /* Hide panel during recording */
+    body.recording #panel { opacity: 0 !important; pointer-events: none !important; }
+    body.recording #hotspot { pointer-events: none; }
+
+  </style>
 </head>
-<body>
-<div class="wrap">
-  <main>
-    <div class="stage">
-      <canvas id="heat"></canvas>
-      <div class="mask-overlay"></div>
-      <div id="nosrc" class="nosrc">Click <b>Start Camera</b> (HTTPS required)</div>
-      <div id="hud" class="hud">motion: 0.00 • fps: —</div>
-    </div>
-  </main>
+<body class="stopped">
+  <div id="stimulus"></div>
+  <canvas id="overlay"></canvas>
 
-  <aside>
-    <h2>Camera</h2>
-    <div class="grid2" style="margin-bottom:6px">
-      <button id="startCam" class="btn">Start Camera</button>
-      <button id="stopCam" class="btn">Stop</button>
-    </div>
-    <div class="note" style="margin-bottom:10px">If this site isn't on <b>https://</b> or <b>localhost</b>, your browser will block the camera.</div>
+  <button id="startBtn" type="button">Start (30s)</button>
 
-    <h2>Motion Extraction</h2>
-    <div class="row">
-      <label>Zone Radius (%)</label>
-      <input id="zoneRadius" type="range" min="10" max="80" step="1" value="40">
-      <span id="zoneRadiusV">40</span>
-    </div>
-    <div class="row">
-      <label>Δt (s)</label>
-      <input id="dt" type="range" min="0.1" max="3" step="0.1" value="0.7">
-      <span id="dtV">0.7</span>
-    </div>
-    <div class="row">
-      <label>Threshold</label>
-      <input id="thr" type="range" min="8" max="80" step="1" value="28">
-      <span id="thrV">28</span>
-    </div>
-    <div class="row">
-      <label>Sensitivity</label>
-      <input id="sens" type="range" min="0.2" max="3" step="0.1" value="1.3">
-      <span id="sensV">1.3</span>
-    </div>
-    <div class="row">
-      <label>Blur (px)</label>
-      <input id="blur" type="range" min="0" max="3" step="1" value="1">
-      <span id="blurV">1</span>
-    </div>
-    <div class="row">
-      <label>Heat fade</label>
-      <input id="fade" type="range" min="0.80" max="0.995" step="0.001" value="0.93">
-      <span id="fadeV">0.93</span>
+  <div id="hotspot" aria-hidden="true"></div>
+  <div id="panel" role="region" aria-label="Controls">
+    <label>Participant ID</label>
+    <input id="pid" type="text" placeholder="p01" value="p01" />
+
+    <label>Condition</label>
+    <input id="cond" type="text" placeholder="baseline / bergamot / blank" value="baseline" />
+
+    <label>View Mode</label>
+    <select id="viewMode">
+      <option value="none">None (stimulus only)</option>
+      <option value="aoi">AOI Grid (4×4)</option>
+      <option value="scanpath">Scanpath</option>
+      <option value="dot">Raw Dot</option>
+    </select>
+
+    <div id="row">
+      <button id="downloadJson" type="button">Download JSON</button>
+      <button id="clearData" type="button">Clear Data</button>
     </div>
 
-    <h2>Audio</h2>
-    <div class="grid2" style="margin-bottom:6px">
-      <button id="audioOn" class="btn">Enable Audio</button>
-      <button id="mute" class="btn">Mute</button>
+    <div id="tiny">
+      <span id="statusDot"></span><span id="statusText">Idle</span><br/>
+      Samples: <span id="sampleCount">0</span>
     </div>
-    <div class="row">
-      <label>Mode</label>
-      <select id="mode">
-        <option value="loop" selected>Loop Remix (load file)</option>
-        <option value="synth">Built-in Synth</option>
-      </select>
-      <span></span>
-    </div>
-    <div class="row" style="grid-template-columns:1fr 1fr auto">
-      <label>Load loop (WAV/MP3)</label>
-      <input id="file" type="file" accept="audio/*">
-      <span class="pill">optional</span>
-    </div>
-    <div class="row">
-      <label>Gain scale</label>
-      <input id="gainScale" type="range" min="0" max="2" step="0.05" value="1.0">
-      <span id="gainScaleV">1.00</span>
-    </div>
-    <div class="row">
-      <label>Rate range</label>
-      <input id="rateRange" type="range" min="0" max="1" step="0.01" value="0.35">
-      <span id="rateRangeV">0.35</span>
-    </div>
-    <div class="note">Mapping: more motion → louder, faster; less motion → quieter, slower. Crossfade keeps rhythm stable while rate changes.</div>
+  </div>
 
-    <h2>Export Still</h2>
-    <div class="grid2">
-      <button id="savePng" class="btn">Save PNG</button>
-      <span class="mut">Heatmap only</span>
-    </div>
-  </aside>
-</div>
+  <!-- WebGazer (CDN) -->
+  <script src="https://unpkg.com/webgazer@2.1.0/dist/webgazer.js"></script>
 
-<!-- Hidden video + working canvases -->
-<video id="vid" playsinline muted style="display:none"></video>
-<canvas id="workA" style="display:none"></canvas>
-<canvas id="workB" style="display:none"></canvas>
+  <script>
+    // -----------------------------
+    // Minimal WebGazer Gaze Logger
+    // -----------------------------
+    // Notes:
+    // - Keeps UI invisible during recording (stimulus purity).
+    // - Records raw samples (t,x,y,conf + normalized coords + AOI id).
+    // - View modes are purely for analysis overlays, not for participants.
 
-<script>
-(function(){
-  // --- DOM shortcuts
-  const $ = id => document.getElementById(id);
-  const vid = $('vid');
-  const canHeat = $('heat'); const hctx = canHeat.getContext('2d', {willReadFrequently:true});
-  const workA = $('workA'), wA = workA.getContext('2d', {willReadFrequently:true});
-  const workB = $('workB'), wB = workB.getContext('2d', {willReadFrequently:true});
-  const nosrc = $('nosrc'), hud = $('hud');
+    const TRIAL_MS = 30000;
+    const SAMPLE_EVERY_MS = 100;   // 10 Hz; stable enough for distribution work
+    const PATH_EVERY_MS = 200;     // scanpath downsample
+    const CONF_THRESHOLD = 0.0;    // webgazer confidence can be spotty; filter offline if needed
+    const AOI_N = 4;               // 4x4 grid
 
-  const ui = {
-    startCam:$('startCam'), stopCam:$('stopCam'),
-    zoneRadius:$('zoneRadius'), zoneRadiusV:$('zoneRadiusV'),
-    dt:$('dt'), dtV:$('dtV'),
-    thr:$('thr'), thrV:$('thrV'),
-    sens:$('sens'), sensV:$('sensV'),
-    blur:$('blur'), blurV:$('blurV'),
-    fade:$('fade'), fadeV:$('fadeV'),
-    audioOn:$('audioOn'), mute:$('mute'),
-    mode:$('mode'),
-    file:$('file'),
-    gainScale:$('gainScale'), gainScaleV:$('gainScaleV'),
-    rateRange:$('rateRange'), rateRangeV:$('rateRangeV'),
-    savePng:$('savePng')
-  };
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
 
-  // --- Sizing
-  function fit(){
-    const r = canHeat.getBoundingClientRect();
-    const dpr = Math.max(1, window.devicePixelRatio||1);
-    const W = Math.max(2, Math.floor(r.width * dpr));
-    const H = Math.max(2, Math.floor(r.height * dpr));
-    [canHeat, workA, workB].forEach(c=>{ c.width=W; c.height=H; });
-  }
-  new ResizeObserver(fit).observe(canHeat); fit();
+    const startBtn = document.getElementById('startBtn');
+    const hotspot = document.getElementById('hotspot');
+    const panel = document.getElementById('panel');
 
-  // --- Camera
-  let stream=null;
-  ui.startCam.onclick = async ()=>{
-    const secure = location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1';
-    if(!secure){ alert('Camera requires HTTPS or localhost.'); return; }
-    try{
-      stream = await navigator.mediaDevices.getUserMedia({
-        video:{ width:{ideal:1280}, height:{ideal:720}, facingMode:{ideal:'environment'} }, audio:false
+    const pidEl = document.getElementById('pid');
+    const condEl = document.getElementById('cond');
+    const viewModeEl = document.getElementById('viewMode');
+
+    const downloadJsonBtn = document.getElementById('downloadJson');
+    const clearDataBtn = document.getElementById('clearData');
+
+    const statusText = document.getElementById('statusText');
+    const sampleCountEl = document.getElementById('sampleCount');
+
+    let isRecording = false;
+    let trialStartPerf = null;
+    let trialStopTimeout = null;
+
+    // Latest gaze from WebGazer listener
+    let latestGaze = null; // {x,y,t,confidence?}
+
+    // Data stores
+    const samples = [];     // raw samples
+    const scanpath = [];    // downsampled points for visualization
+
+    // Timers
+    let sampleTimer = null;
+    let pathTimer = null;
+
+    // Panel hover logic
+    let hidePanelTimer = null;
+    function showPanel() {
+      if (document.body.classList.contains('recording')) return;
+      panel.classList.add('visible');
+      if (hidePanelTimer) clearTimeout(hidePanelTimer);
+    }
+    function scheduleHidePanel() {
+      if (document.body.classList.contains('recording')) return;
+      if (hidePanelTimer) clearTimeout(hidePanelTimer);
+      hidePanelTimer = setTimeout(() => panel.classList.remove('visible'), 180);
+    }
+    hotspot.addEventListener('mouseenter', showPanel);
+    hotspot.addEventListener('mouseleave', scheduleHidePanel);
+    panel.addEventListener('mouseenter', showPanel);
+    panel.addEventListener('mouseleave', scheduleHidePanel);
+
+    // Resize canvas to fit viewport
+    function resize() {
+      overlay.width = window.innerWidth * devicePixelRatio;
+      overlay.height = window.innerHeight * devicePixelRatio;
+      overlay.style.width = window.innerWidth + 'px';
+      overlay.style.height = window.innerHeight + 'px';
+      ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      redrawOverlay(); // refresh on resize
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Utility: get stimulus rect for relative coords
+    function getStimulusRect() {
+      return document.getElementById('stimulus').getBoundingClientRect();
+    }
+
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    // AOI computation: 4x4 grid over stimulus rect
+    function computeAOI(xRel, yRel, w, h) {
+      const col = clamp(Math.floor((xRel / w) * AOI_N), 0, AOI_N - 1);
+      const row = clamp(Math.floor((yRel / h) * AOI_N), 0, AOI_N - 1);
+      return { row, col, id: row * AOI_N + col };
+    }
+
+    // WebGazer init (minimal)
+    async function initWebGazer() {
+      // Safety: avoid WebGazer injecting video previews and overlays
+      webgazer.setGazeListener((data, timestamp) => {
+        if (!data) return;
+        // data.x/data.y are viewport coords
+        latestGaze = {
+          x: data.x,
+          y: data.y,
+          t: timestamp,
+          confidence: (typeof data.confidence === 'number') ? data.confidence : null
+        };
       });
-      vid.srcObject = stream;
-      await vid.play();
-      nosrc.style.display='none';
-    }catch(e){
-      alert('Camera error: '+(e && e.message ? e.message : e));
-    }
-  };
-  ui.stopCam.onclick = ()=>{ if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; } vid.pause(); nosrc.style.display='flex'; };
 
-  // --- Controls
-  function syncVal(r, out){ out.textContent = (r.step && r.step.indexOf('.')>-1) ? (+r.value).toFixed(r.step.split('.')[1].length) : r.value; r.style.setProperty('--p', ((+r.value-(+r.min||0))/((+r.max||100)-(+r.min||0)))*100 + '%'); }
-  ['zoneRadius','dt','thr','sens','blur','fade','gainScale','rateRange'].forEach(id=>{
-    const r = ui[id], v = ui[id+'V']; syncVal(r,v); r.addEventListener('input', ()=>syncVal(r,v));
-  });
+      // Reduce UI noise from webgazer
+      webgazer.showVideo(false);
+      webgazer.showFaceOverlay(false);
+      webgazer.showFaceFeedbackBox(false);
 
-  // --- Motion core
-  const state = {
-    lastStamp: 0,
-    lastFrame: null,
-    accum: 0,
-    motionEMA: 0,
-    fpsEMA: 0
-  };
+      // Start the model; camera permission happens here
+      await webgazer.begin();
 
-  function drawVideo(ctx, W, H, blurPx){
-    ctx.save();
-    if(blurPx>0) ctx.filter=`blur(${blurPx}px)`;
-    const vw = vid.videoWidth|0, vh = vid.videoHeight|0;
-    if(vw && vh){
-      const s = Math.min(W/vw, H/vh);
-      const dw = Math.round(vw*s), dh = Math.round(vh*s);
-      const dx = (W-dw)>>1, dy = (H-dh)>>1;
-      ctx.drawImage(vid, dx, dy, dw, dh);
-    }
-    ctx.restore();
-  }
+      // Optional: make predictions steadier
+      webgazer.setRegression('ridge'); // common default
+      webgazer.setTracker('clmtrackr');
 
-  // --- Audio (Web Audio)
-  let AC=null, master=null, comp=null, lp=null, loopBuf=null;
-  let loopA=null, loopB=null, loopStart=0, loopDur=0, loopPlaying=false;
-  let muted=false;
-
-  function ensureAudio(){
-    if(AC) return;
-    AC = new (window.AudioContext||window.webkitAudioContext)();
-    comp = AC.createDynamicsCompressor();
-    lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=18000;
-    master = AC.createGain(); master.gain.value=0.0;
-    comp.connect(lp).connect(master).connect(AC.destination);
-  }
-
-  ui.audioOn.onclick = async ()=>{
-    ensureAudio();
-    try{ await AC.resume(); }catch(_){}
-  };
-  ui.mute.onclick = ()=>{
-    muted = !muted;
-    ui.mute.textContent = muted ? 'Unmute' : 'Mute';
-    if(master) master.gain.value = muted ? 0 : master.gain.value;
-  };
-
-  // Load loop
-  ui.file.addEventListener('change', async (e)=>{
-    const f = e.target.files && e.target.files[0];
-    if(!f) return;
-    ensureAudio();
-    const arr = await f.arrayBuffer();
-    loopBuf = await AC.decodeAudioData(arr);
-    loopDur = loopBuf.duration;
-    startLoopRemix();
-  });
-
-  function stopLoops(){
-    [loopA, loopB].forEach(s=>{ try{ s && s.stop(); }catch(_){} } );
-    loopA=loopB=null; loopPlaying=false;
-  }
-
-  function startLoopRemix(){
-    if(!AC || !loopBuf) return;
-    stopLoops();
-    // Two staggered players → crossfade + rate warp
-    loopA = AC.createBufferSource(); loopA.buffer = loopBuf; loopA.loop = true;
-    loopB = AC.createBufferSource(); loopB.buffer = loopBuf; loopB.loop = true;
-
-    const gA = AC.createGain(), gB = AC.createGain();
-    gA.gain.value = 1; gB.gain.value = 0;
-
-    loopA.connect(gA).connect(comp);
-    loopB.connect(gB).connect(comp);
-
-    loopStart = AC.currentTime + 0.05;
-    const offsetB = loopDur/2; // half-cycle offset for textured crossfade
-    loopA.start(loopStart);
-    loopB.start(loopStart, offsetB % loopDur);
-    loopPlaying = true;
-
-    // store for mod
-    loopA._gain = gA; loopB._gain = gB;
-  }
-
-  // Built-in synth fallback
-  let synth = null;
-  function ensureSynth(){
-    ensureAudio();
-    if(synth) return synth;
-    const g = AC.createGain(); g.gain.value = 0.0;
-    g.connect(comp);
-    synth = {
-      g,
-      tickKick(){
-        const o = AC.createOscillator();
-        const og = AC.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(120, AC.currentTime);
-        o.frequency.exponentialRampToValueAtTime(40, AC.currentTime+0.12);
-        og.gain.setValueAtTime(0.8, AC.currentTime);
-        og.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+0.14);
-        o.connect(og).connect(g); o.start(); o.stop(AC.currentTime+0.16);
-      },
-      tickNoise(){
-        const buf = AC.createBuffer(1, AC.sampleRate*0.12, AC.sampleRate);
-        const data = buf.getChannelData(0);
-        for(let i=0;i<data.length;i++) data[i] = (Math.random()*2-1)*0.7;
-        const src = AC.createBufferSource(); src.buffer = buf;
-        const sh = AC.createBiquadFilter(); sh.type='highpass'; sh.frequency.value=4000;
-        const eg = AC.createGain();
-        eg.gain.value = 0.6;
-        eg.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+0.12);
-        src.connect(sh).connect(eg).connect(g); src.start(); src.stop(AC.currentTime+0.13);
-      },
-      tone(level){
-        const o = AC.createOscillator(); o.type='triangle';
-        const eg = AC.createGain(); eg.gain.value = Math.min(0.2, 0.02 + 0.18*level);
-        o.frequency.value = 220 + 660*level;
-        o.connect(eg).connect(g);
-        o.start(); o.stop(AC.currentTime + 0.08 + 0.25*level);
-      }
-    };
-    return synth;
-  }
-
-  // --- Mapping motion → audio params
-  function applyAudioFromMotion(m){
-    if(!AC) return;
-    // HARD LIMITS - Keep motion in a controlled range
-    const motion = Math.max(0.1, Math.min(0.7, m)); // Never below 0.1, never above 0.7
-    
-    const gainScale = +ui.gainScale.value;
-    const rateRange = +ui.rateRange.value;
-
-    // Master gain with hard ceiling
-    const targetGain = muted ? 0 : Math.min(0.6, motion * (0.5 * gainScale)); // Max gain 0.6
-    
-    if(master){
-      master.gain.cancelScheduledValues(AC.currentTime);
-      master.gain.linearRampToValueAtTime(targetGain, AC.currentTime + 0.05);
+      // Give it a moment
+      await new Promise(r => setTimeout(r, 500));
     }
 
-    // Filter range limits
-    const freq = 600 + motion * 8000; // Reduced from 18000 to 8000 max
-    if(lp){
-      lp.frequency.cancelScheduledValues(AC.currentTime);
-      lp.frequency.linearRampToValueAtTime(freq, AC.currentTime + 0.06);
-    }
+    // Recording controls
+    async function startTrial() {
+      if (isRecording) return;
 
-    if(ui.mode.value === 'loop'){
-      if(loopBuf && !loopPlaying) startLoopRemix();
-      if(loopA && loopB){
-        // Crossfade with reduced range
-        const x = motion;
-        const a = Math.cos(x * Math.PI * 0.5);
-        const b = Math.sin(x * Math.PI * 0.5);
-        loopA._gain.gain.linearRampToValueAtTime(a, AC.currentTime + 0.05);
-        loopB._gain.gain.linearRampToValueAtTime(b, AC.currentTime + 0.05);
+      // Ensure webgazer running (permission prompt may appear)
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting...';
 
-        // Playback rate with tighter range
-        const base = 1.0;
-        const pr = Math.max(0.7, Math.min(1.5, base + (motion*2-1) * rateRange * 0.5)); // Reduced range
-        loopA.playbackRate.value = pr;
-        loopB.playbackRate.value = Math.max(0.7, Math.min(1.5, 2-pr));
-      }
-    } else {
-      // Synth with limited output
-      const s = ensureSynth();
-      const tempo = 60 + motion*80; // Reduced BPM range
-      const period = 60/tempo;
-      
-      if(!applyAudioFromMotion._next || AC.currentTime >= applyAudioFromMotion._next){
-        s.tickKick();
-        setTimeout(()=>s.tickNoise(), period*500);
-        s.tone(motion);
-        applyAudioFromMotion._next = AC.currentTime + period;
-      }
-      // Limited synth gain
-      s.g.gain.linearRampToValueAtTime(muted ? 0 : Math.min(0.5, 0.3*gainScale), AC.currentTime+0.05);
-    }
-  }
-
-  // --- Render loop
-  let lastT = performance.now();
-  function loop(now){
-    requestAnimationFrame(loop);
-
-    const W = canHeat.width, H = canHeat.height;
-    if(!W || !H) return;
-
-    // Clear & gently fade previous heat
-    const fade = 1 - Math.max(0.80, Math.min(0.995, +ui.fade.value));
-    hctx.globalCompositeOperation = 'destination-out';
-    hctx.fillStyle = `rgba(0,0,0,${fade})`;
-    hctx.fillRect(0,0,W,H);
-    hctx.globalCompositeOperation = 'source-over';
-
-    if(vid.readyState >= 2){
-      // Δt buffering: draw two frames spaced apart in time
-      // We approximate by: current frame in workA; previous cached ImageData in workB.
-      drawVideo(wA, W, H, +ui.blur.value);
-      const curr = wA.getImageData(0,0,W,H);
-
-      // Build/keep a circular buffer of past frames by time spacing
-      const want = Math.max(0.1, +ui.dt.value);
-      if(!state.lastFrame || (vid.currentTime - state.lastStamp) >= want){
-        // stamp current into lastFrame
-        state.lastFrame = curr;
-        state.lastStamp = vid.currentTime;
+      try {
+        await initWebGazer();
+      } catch (e) {
+        console.error(e);
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start (30s)';
+        alert('Camera permission / WebGazer init failed. Check browser permissions and try again.');
+        return;
       }
 
-      const prev = state.lastFrame;
-      if(prev){
-        const thr = +ui.thr.value;
-        const sens = +ui.sens.value;
-        const cd = curr.data, pd = prev.data;
-        
-        // Calculate circular zone parameters
-        const zoneRadiusPercent = +ui.zoneRadius.value;
-        const centerX = W / 2;
-        const centerY = H / 2;
-        const radius = Math.min(W, H) * (zoneRadiusPercent / 100);
-        const radiusSquared = radius * radius;
-        
-        // Heatmap pass (cheap): write red intensity per pixel where |Δluma| > thr
-        const step = 4;
-        let changed = 0;
-        let totalPixelsInZone = 0;
-        const rowSkip = 1, colSkip = 1; // set >1 to decimate for speed
-        
-        for(let y=0; y<H; y+=rowSkip){
-          for(let x=0; x<W; x+=colSkip){
-            // Check if pixel is within circular zone
-            const dx = x - centerX;
-            const dy = y - centerY;
-            const distSquared = dx*dx + dy*dy;
-            
-            if(distSquared <= radiusSquared){
-              totalPixelsInZone++;
-              
-              const i = (y*W + x) * 4;
-              const r=cd[i], g=cd[i+1], b=cd[i+2];
-              const pr=pd[i], pg=pd[i+1], pb=pd[i+2];
-              const l = r*0.2126 + g*0.7152 + b*0.0722;
-              const q = pr*0.2126 + pg*0.7152 + pb*0.0722;
-              const d = Math.abs(l - q);
-              
-              if(d > thr){
-                changed++;
-                const a = Math.min(255, (d-thr) * (2.0 * sens));
-                hctx.fillStyle = `rgba(93,212,255,${Math.min(1, a/255)})`; // cyan heat
-                hctx.fillRect(x, y, 1, 1);
-              }
-            }
+      // Lock down stimulus purity
+      isRecording = true;
+      document.body.classList.add('recording');
+      document.body.classList.remove('stopped');
+      document.body.classList.add('running');
+      statusText.textContent = 'Recording…';
+
+      // Hide start button
+      startBtn.style.display = 'none';
+
+      // Force analysis overlays off while recording
+      viewModeEl.value = 'none';
+      redrawOverlay();
+
+      // Start timers
+      trialStartPerf = performance.now();
+
+      // Sample timer: log gaze at fixed cadence
+      sampleTimer = setInterval(() => {
+        const rect = getStimulusRect();
+        const nowPerf = performance.now();
+        const t_ms = Math.round(nowPerf - trialStartPerf);
+
+        let x = null, y = null, conf = null, valid = false;
+        let x_rel = null, y_rel = null, x_norm = null, y_norm = null;
+        let aoi = null;
+
+        if (latestGaze && typeof latestGaze.x === 'number' && typeof latestGaze.y === 'number') {
+          x = latestGaze.x;
+          y = latestGaze.y;
+          conf = latestGaze.confidence;
+
+          // Relative to stimulus rect
+          x_rel = x - rect.left;
+          y_rel = y - rect.top;
+
+          const inBounds = (x_rel >= 0 && x_rel <= rect.width && y_rel >= 0 && y_rel <= rect.height);
+          const passConf = (conf == null) ? true : (conf >= CONF_THRESHOLD);
+
+          valid = inBounds && passConf;
+
+          if (valid) {
+            x_norm = x_rel / rect.width;
+            y_norm = y_rel / rect.height;
+            const a = computeAOI(x_rel, y_rel, rect.width, rect.height);
+            aoi = { id: a.id, row: a.row, col: a.col, n: AOI_N };
           }
         }
-        
-        // Normalize motion magnitude ~ fraction of pixels changed within the circular zone
-        const m = totalPixelsInZone > 0 ? changed / totalPixelsInZone : 0;
-        // EMA for stability
-        state.motionEMA = state.motionEMA*0.85 + Math.min(1, m*12)*0.15;
 
-        // Audio mapping
-        applyAudioFromMotion(state.motionEMA);
-      }
+        samples.push({
+          participant_id: pidEl.value.trim() || null,
+          condition: condEl.value.trim() || null,
+          t_ms,
+          x_px: x,
+          y_px: y,
+          x_rel_px: x_rel,
+          y_rel_px: y_rel,
+          x_norm,
+          y_norm,
+          conf,
+          valid,
+          aoi
+        });
+
+        sampleCountEl.textContent = String(samples.length);
+      }, SAMPLE_EVERY_MS);
+
+      // Scanpath timer: downsample latest valid point
+      pathTimer = setInterval(() => {
+        const rect = getStimulusRect();
+        if (!latestGaze) return;
+
+        const x = latestGaze.x;
+        const y = latestGaze.y;
+        const x_rel = x - rect.left;
+        const y_rel = y - rect.top;
+        const inBounds = (x_rel >= 0 && x_rel <= rect.width && y_rel >= 0 && y_rel <= rect.height);
+        if (!inBounds) return;
+
+        const nowPerf = performance.now();
+        const t_ms = Math.round(nowPerf - trialStartPerf);
+
+        scanpath.push({ t_ms, x_rel_px: x_rel, y_rel_px: y_rel });
+      }, PATH_EVERY_MS);
+
+      // Auto-stop
+      trialStopTimeout = setTimeout(stopTrial, TRIAL_MS);
+
     }
 
-    // HUD
-    const dt = now - lastT; lastT = now;
-    const inst = dt>0 ? 1000/dt : 0;
-    state.fpsEMA = state.fpsEMA ? state.fpsEMA*0.9 + inst*0.1 : inst;
-    hud.textContent = `motion: ${state.motionEMA.toFixed(2)} • fps: ${state.fpsEMA.toFixed(1)}`;
-  }
-  requestAnimationFrame(loop);
+    function stopTrial() {
+      if (!isRecording) return;
 
-  // --- Export still
-  ui.savePng.onclick = ()=>{
-    const a = document.createElement('a');
-    a.download = `motion_heat_${Date.now()}.png`;
-    a.href = canHeat.toDataURL('image/png');
-    a.click();
-  };
+      isRecording = false;
+      document.body.classList.remove('recording');
+      document.body.classList.remove('running');
+      document.body.classList.add('stopped');
+      statusText.textContent = 'Stopped';
 
-})();
-</script>
+      if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
+      if (pathTimer) { clearInterval(pathTimer); pathTimer = null; }
+      if (trialStopTimeout) { clearTimeout(trialStopTimeout); trialStopTimeout = null; }
+
+      // Keep webgazer running; you can stop it manually if you want:
+      // webgazer.end();
+
+      // Show start button again for next trial
+      startBtn.style.display = 'block';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start (30s)';
+
+      // Overlays remain off unless you open panel and switch view mode
+      redrawOverlay();
+    }
+
+    startBtn.addEventListener('click', startTrial);
+
+    // Overlay rendering
+    function clearCanvas() {
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+    }
+
+    function drawAOIGrid() {
+      const rect = getStimulusRect();
+      ctx.save();
+      ctx.translate(rect.left, rect.top);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+
+      for (let i = 1; i < AOI_N; i++) {
+        const x = (rect.width / AOI_N) * i;
+        const y = (rect.height / AOI_N) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, rect.height);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(rect.width, y);
+        ctx.stroke();
+      }
+      // border
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.strokeRect(0, 0, rect.width, rect.height);
+      ctx.restore();
+    }
+
+    function drawRawDot() {
+      if (!latestGaze) return;
+      const rect = getStimulusRect();
+      const x_rel = latestGaze.x - rect.left;
+      const y_rel = latestGaze.y - rect.top;
+      if (x_rel < 0 || y_rel < 0 || x_rel > rect.width || y_rel > rect.height) return;
+
+      ctx.save();
+      ctx.translate(rect.left, rect.top);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(x_rel, y_rel, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawScanpath() {
+      const rect = getStimulusRect();
+      if (scanpath.length < 2) return;
+
+      ctx.save();
+      ctx.translate(rect.left, rect.top);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath();
+      ctx.moveTo(scanpath[0].x_rel_px, scanpath[0].y_rel_px);
+      for (let i = 1; i < scanpath.length; i++) {
+        ctx.lineTo(scanpath[i].x_rel_px, scanpath[i].y_rel_px);
+      }
+      ctx.stroke();
+
+      // draw nodes sparsely
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      for (let i = 0; i < scanpath.length; i += 5) {
+        ctx.beginPath();
+        ctx.arc(scanpath[i].x_rel_px, scanpath[i].y_rel_px, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function redrawOverlay() {
+      clearCanvas();
+
+      // Never draw overlays while recording (stimulus purity)
+      if (document.body.classList.contains('recording')) return;
+
+      const mode = viewModeEl.value;
+      if (mode === 'aoi') drawAOIGrid();
+      if (mode === 'scanpath') drawScanpath();
+      if (mode === 'dot') drawRawDot();
+    }
+
+    // Repaint overlay at a modest rate when not recording, so dot updates
+    setInterval(() => {
+      if (document.body.classList.contains('recording')) return;
+      const mode = viewModeEl.value;
+      if (mode === 'dot') redrawOverlay();
+    }, 60);
+
+    viewModeEl.addEventListener('change', redrawOverlay);
+
+    // Download JSON
+    function downloadJSON() {
+      const meta = {
+        exported_at_iso: new Date().toISOString(),
+        trial_ms: TRIAL_MS,
+        sample_every_ms: SAMPLE_EVERY_MS,
+        scanpath_every_ms: PATH_EVERY_MS,
+        aoi_grid_n: AOI_N,
+        stimulus: {
+          width_px: getStimulusRect().width,
+          height_px: getStimulusRect().height,
+          devicePixelRatio
+        }
+      };
+
+      const payload = {
+        meta,
+        samples,
+        scanpath
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const pid = (pidEl.value.trim() || 'p');
+      const cond = (condEl.value.trim() || 'cond').replace(/\s+/g, '_');
+      a.download = `webgazer_${pid}_${cond}_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    downloadJsonBtn.addEventListener('click', downloadJSON);
+
+    // Clear data
+    clearDataBtn.addEventListener('click', () => {
+      if (isRecording) return;
+      samples.length = 0;
+      scanpath.length = 0;
+      sampleCountEl.textContent = '0';
+      redrawOverlay();
+    });
+
+    // Safety: stop if user leaves tab
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && isRecording) stopTrial();
+    });
+
+    // Initial draw
+    redrawOverlay();
+  </script>
 </body>
 </html>
