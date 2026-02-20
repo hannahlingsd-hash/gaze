@@ -305,6 +305,12 @@
     </div>
 
     <div id="row" style="margin-top:8px;">
+      <button id="exportSession" type="button">↓ Export Session</button>
+      <button id="loadSession" type="button">↑ Load Session</button>
+    </div>
+    <input id="sessionFileInput" type="file" accept=".wgz,.json" style="display:none" />
+
+    <div id="row" style="margin-top:8px;">
       <button id="recalibrate" type="button">Recalibrate</button>
       <button id="stopNow" type="button">Stop</button>
     </div>
@@ -878,7 +884,16 @@
       if (mode === 'scanpath') drawScanpath(t);
     }
 
-    viewModeEl.addEventListener('change', () => redrawOverlay(getCurrentScrubT()));
+    viewModeEl.addEventListener('change', () => {
+      const mode = viewModeEl.value;
+      if (mode !== 'none' && trialSamples.length > 0) {
+        const dur = trialSamples[trialSamples.length - 1].t_ms;
+        showScrubber(dur);
+      } else if (mode === 'none') {
+        hideScrubber();
+      }
+      redrawOverlay(getCurrentScrubT());
+    });
 
     // --------- Scrubber ----------
     const scrubberEl   = document.getElementById('scrubber');
@@ -993,6 +1008,85 @@
     }
 
     downloadJsonBtn.addEventListener('click', downloadJSON);
+
+    // --------- Export / Load Session (.wgz) ----------
+    function exportSession() {
+      if (trialSamples.length === 0) {
+        alert('No trial data to export. Run a trial first.');
+        return;
+      }
+      const actualDuration = trialSamples[trialSamples.length - 1].t_ms;
+      const payload = {
+        _type: 'webgazer_session',
+        _version: 1,
+        exported_at_iso: new Date().toISOString(),
+        participant_id: pidEl.value.trim() || null,
+        condition:      condEl.value.trim() || null,
+        trial_ms:       TRIAL_MS,
+        actual_duration_ms: actualDuration,
+        sample_every_ms: SAMPLE_EVERY_MS,
+        aoi_grid_n:     AOI_N,
+        samples:        trialSamples,
+        scanpath:       trialScanpath
+      };
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const pid  = (pidEl.value.trim()  || 'p');
+      const cond = (condEl.value.trim() || 'cond').replace(/\s+/g, '_');
+      a.download = `session_${pid}_${cond}_${Date.now()}.wgz`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function loadSession(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        let data;
+        try {
+          data = JSON.parse(e.target.result);
+        } catch(err) {
+          alert('Could not parse file — make sure it\'s a valid .wgz session file.');
+          return;
+        }
+
+        if (data._type !== 'webgazer_session') {
+          alert('This doesn\'t look like a WebGazer session file.');
+          return;
+        }
+
+        if (isRecording) return;
+
+        // Restore state
+        trialSamples  = data.samples  || [];
+        trialScanpath = data.scanpath || [];
+
+        if (data.participant_id) pidEl.value  = data.participant_id;
+        if (data.condition)      condEl.value = data.condition;
+
+        sampleCountEl.textContent = String(trialSamples.length);
+
+        // Show scrubber at full duration
+        const dur = data.actual_duration_ms || (trialSamples.length > 0 ? trialSamples[trialSamples.length-1].t_ms : TRIAL_MS);
+        showScrubber(dur);
+
+        // Switch to scanpath view by default so something visible immediately
+        if (viewModeEl.value === 'none') viewModeEl.value = 'scanpath';
+        redrawOverlay(dur);
+
+        statusText.textContent = 'Session loaded';
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById('exportSession').addEventListener('click', exportSession);
+
+    const sessionFileInput = document.getElementById('sessionFileInput');
+    document.getElementById('loadSession').addEventListener('click', () => sessionFileInput.click());
+    sessionFileInput.addEventListener('change', () => {
+      const file = sessionFileInput.files[0];
+      if (file) { loadSession(file); sessionFileInput.value = ''; }
+    });
 
     function exportPNG() {
       const mode = viewModeEl.value;
