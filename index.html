@@ -121,6 +121,11 @@
     body.recording #webgazerFaceFeedbackBox,
     body.recording #webgazer-prediction-point-canvas { display: none !important; }
 
+    /* Never let WebGazer's dot intercept mouse clicks */
+    #webgazer-prediction-point-canvas,
+    #webgazerGazeDot,
+    .webgazerGazeDot { pointer-events: none !important; }
+
     /* ---- Calibration layer ---- */
     #calibLayer {
       position: absolute;
@@ -165,16 +170,18 @@
       box-shadow: 0 0 0 8px rgba(80,255,170,0.10);
     }
     .calibDot.active {
-      border-color: rgba(255,255,255,0.95);
-      background: rgba(255,255,255,0.25);
-      box-shadow: 0 0 0 14px rgba(255,255,255,0.07);
+      border-color: #fff;
+      border-width: 3px;
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 6px rgba(255,255,255,0.35), 0 0 0 18px rgba(255,255,255,0.12), 0 0 32px 8px rgba(255,255,255,0.25);
       pointer-events: auto;
       cursor: pointer;
-      animation: pulse 1s ease-in-out infinite;
+      animation: pulse 0.8s ease-in-out infinite;
+      z-index: 99;
     }
     @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 8px rgba(255,255,255,0.07); }
-      50%       { box-shadow: 0 0 0 18px rgba(255,255,255,0.03); }
+      0%, 100% { box-shadow: 0 0 0 6px rgba(255,255,255,0.35), 0 0 0 18px rgba(255,255,255,0.12), 0 0 32px 8px rgba(255,255,255,0.2); }
+      50%       { box-shadow: 0 0 0 10px rgba(255,255,255,0.5), 0 0 0 28px rgba(255,255,255,0.18), 0 0 48px 12px rgba(255,255,255,0.35); }
     }
     /* progress ring */
     .calibDot::after {
@@ -186,6 +193,76 @@
               mask: radial-gradient(circle, transparent 52%, #000 53%);
       pointer-events: none;
     }
+    /* ---- Temporal scrubber ---- */
+    #scrubber {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 10px 20px 14px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(255,255,255,0.12);
+      z-index: 12;
+      display: none;
+      align-items: center;
+      gap: 12px;
+    }
+    #scrubber.visible { display: flex; }
+    body.recording #scrubber, body.calibrating #scrubber { display: none !important; }
+
+    #scrubTime {
+      font-size: 12px;
+      color: rgba(255,255,255,0.75);
+      white-space: nowrap;
+      min-width: 80px;
+      font-variant-numeric: tabular-nums;
+    }
+    #scrubPlay {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      border-radius: 999px;
+      width: 30px; height: 30px;
+      font-size: 12px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #scrubPlay:hover { background: rgba(255,255,255,0.18); }
+
+    #scrubRange {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.2);
+      outline: none;
+      cursor: pointer;
+    }
+    #scrubRange::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 0 0 4px rgba(0,0,0,0.4);
+    }
+    #scrubRange::-moz-range-thumb {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    #scrubDuration {
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      white-space: nowrap;
+      min-width: 40px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
   </style>
 </head>
 <body class="stopped">
@@ -193,6 +270,14 @@
   <canvas id="overlay"></canvas>
 
   <button id="startBtn" type="button">Calibrate</button>
+
+  <!-- Temporal scrubber — shown after trial ends -->
+  <div id="scrubber">
+    <button id="scrubPlay" title="Play/Pause">▶</button>
+    <span id="scrubTime">0.0s</span>
+    <input id="scrubRange" type="range" min="0" max="30000" value="0" step="100" />
+    <span id="scrubDuration">30.0s</span>
+  </div>
 
   <div id="calibLayer" aria-hidden="true">
     <div id="calibMsg">Click each dot 5 times — start with the highlighted one</div>
@@ -345,16 +430,15 @@
      */
     function setPredictionDotVisible(visible) {
       try {
-        // v2 public API
         if (typeof webgazer.showPredictionPoints === 'function') {
           webgazer.showPredictionPoints(visible);
         }
       } catch(e) {}
 
-      // Also target the canvas WebGazer injects directly
       const sel = '#webgazer-prediction-point-canvas, #webgazerGazeDot, .webgazerGazeDot';
       document.querySelectorAll(sel).forEach(el => {
         el.style.display = visible ? '' : 'none';
+        el.style.pointerEvents = 'none'; // never block clicks
       });
     }
 
@@ -574,6 +658,7 @@
       trialSamples  = [];
       trialScanpath = [];
       sampleCountEl.textContent = '0';
+      hideScrubber();
 
       isRecording = true;
       document.body.classList.add('recording');
@@ -648,24 +733,25 @@
 
       hardStopWebgazer();
 
+      const actualDuration = trialSamples.length > 0 ? trialSamples[trialSamples.length-1].t_ms : TRIAL_MS;
+      showScrubber(actualDuration);
+
       startBtn.style.display = 'block';
       startBtn.disabled = false;
       startBtn.textContent = 'Start (30s)';
 
       redrawOverlay();
     }
-
-    // --------- Overlay drawing ----------
     function clearCanvas() { ctx.clearRect(0,0,overlay.width,overlay.height); }
 
-    function drawAOIGrid() {
+    function drawAOIGrid(maxT = Infinity) {
       const r = getStimulusRect();
       ctx.save();
 
-      // Count dwell samples per cell
       const counts = new Array(AOI_N * AOI_N).fill(0);
       let maxCount = 0;
       for (const s of trialSamples) {
+        if (s.t_ms > maxT) break;
         if (s.valid && s.aoi) {
           counts[s.aoi.id]++;
           if (counts[s.aoi.id] > maxCount) maxCount = counts[s.aoi.id];
@@ -675,7 +761,6 @@
       const cellW = r.width  / AOI_N;
       const cellH = r.height / AOI_N;
 
-      // Draw heatmap fills (only if we have data)
       if (maxCount > 0) {
         for (let row = 0; row < AOI_N; row++) {
           for (let col = 0; col < AOI_N; col++) {
@@ -689,7 +774,6 @@
         }
       }
 
-      // Grid lines — always visible
       ctx.lineWidth = 1;
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
       ctx.strokeRect(r.left, r.top, r.width, r.height);
@@ -698,7 +782,6 @@
         ctx.beginPath(); ctx.moveTo(r.left, r.top + cellH*i); ctx.lineTo(r.left + r.width, r.top + cellH*i); ctx.stroke();
       }
 
-      // Labels — always show cell IDs, show counts only if data exists
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       for (let row = 0; row < AOI_N; row++) {
@@ -718,15 +801,15 @@
       ctx.restore();
     }
 
-    function drawRawTrail() {
+    function drawRawTrail(maxT = Infinity) {
       const pts = [];
       for (const s of trialSamples) {
+        if (s.t_ms > maxT) break;
         if (s.valid && typeof s.x_px === 'number') pts.push({x: s.x_px, y: s.y_px});
       }
       if (pts.length < 2) return;
       ctx.save();
 
-      // Fading trail oldest→newest
       for (let i = 1; i < pts.length; i++) {
         const alpha = 0.08 + 0.55 * (i / pts.length);
         ctx.beginPath();
@@ -737,50 +820,42 @@
         ctx.stroke();
       }
 
-      // Green dot at START (first point)
       ctx.fillStyle = 'rgba(80,255,170,0.95)';
       ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 6, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
-      ctx.stroke();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
 
-      // Red dot at END (last point) — this was the bug, pts[0] was wrong
       const last = pts[pts.length - 1];
       ctx.fillStyle = 'rgba(255,90,90,0.95)';
       ctx.beginPath(); ctx.arc(last.x, last.y, 7, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
-      ctx.stroke();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
 
       ctx.restore();
     }
 
-    function drawScanpath() {
-      if (trialScanpath.length < 2) return;
+    function drawScanpath(maxT = Infinity) {
+      const pts = trialScanpath.filter(p => p.t_ms <= maxT);
+      if (pts.length < 2) return;
       ctx.save();
 
-      // Dashed connecting lines
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = 'rgba(255,255,255,0.4)';
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(trialScanpath[0].x_px, trialScanpath[0].y_px);
-      for (let i=1; i<trialScanpath.length; i++) ctx.lineTo(trialScanpath[i].x_px, trialScanpath[i].y_px);
+      ctx.moveTo(pts[0].x_px, pts[0].y_px);
+      for (let i=1; i<pts.length; i++) ctx.lineTo(pts[i].x_px, pts[i].y_px);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Numbered fixation circles
-      for (let i = 0; i < trialScanpath.length; i++) {
-        const p = trialScanpath[i];
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
         const isFirst = i === 0;
-        const isLast  = i === trialScanpath.length - 1;
-        const radius  = 12;
-
+        const isLast  = i === pts.length - 1;
         ctx.beginPath();
-        ctx.arc(p.x_px, p.y_px, radius, 0, Math.PI*2);
+        ctx.arc(p.x_px, p.y_px, 12, 0, Math.PI*2);
         ctx.fillStyle = isFirst ? 'rgba(80,255,170,0.85)' : isLast ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.75)';
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        ctx.lineWidth = 1; ctx.stroke();
 
         ctx.font = 'bold 10px system-ui';
         ctx.fillStyle = '#000';
@@ -792,17 +867,100 @@
       ctx.restore();
     }
 
-    function redrawOverlay() {
+    function redrawOverlay(maxT) {
       clearCanvas();
       if (document.body.classList.contains('recording'))   return;
       if (document.body.classList.contains('calibrating')) return;
+      const t = (maxT !== undefined) ? maxT : Infinity;
       const mode = viewModeEl.value;
-      if (mode === 'aoi')      drawAOIGrid();
-      if (mode === 'raw')      drawRawTrail();
-      if (mode === 'scanpath') drawScanpath();
+      if (mode === 'aoi')      drawAOIGrid(t);
+      if (mode === 'raw')      drawRawTrail(t);
+      if (mode === 'scanpath') drawScanpath(t);
     }
 
-    viewModeEl.addEventListener('change', redrawOverlay);
+    viewModeEl.addEventListener('change', () => redrawOverlay(getCurrentScrubT()));
+
+    // --------- Scrubber ----------
+    const scrubberEl   = document.getElementById('scrubber');
+    const scrubRange   = document.getElementById('scrubRange');
+    const scrubTime    = document.getElementById('scrubTime');
+    const scrubDuration = document.getElementById('scrubDuration');
+    const scrubPlay    = document.getElementById('scrubPlay');
+
+    let scrubMaxMs  = TRIAL_MS;
+    let playRafId   = null;
+    let playStartWall = null;
+    let playStartMs   = 0;
+    let isPlaying   = false;
+
+    function fmt(ms) {
+      return (ms / 1000).toFixed(1) + 's';
+    }
+
+    function getCurrentScrubT() {
+      if (!scrubberEl.classList.contains('visible')) return Infinity;
+      return Number(scrubRange.value);
+    }
+
+    function setScrubT(ms) {
+      const clamped = Math.max(0, Math.min(scrubMaxMs, ms));
+      scrubRange.value = clamped;
+      scrubTime.textContent = fmt(clamped);
+      redrawOverlay(clamped);
+    }
+
+    function showScrubber(durationMs) {
+      scrubMaxMs = durationMs;
+      scrubRange.max = durationMs;
+      scrubRange.value = durationMs;
+      scrubDuration.textContent = fmt(durationMs);
+      scrubTime.textContent = fmt(durationMs);
+      scrubberEl.classList.add('visible');
+    }
+
+    function hideScrubber() {
+      stopPlay();
+      scrubberEl.classList.remove('visible');
+    }
+
+    scrubRange.addEventListener('input', () => {
+      stopPlay();
+      setScrubT(Number(scrubRange.value));
+    });
+
+    function stopPlay() {
+      if (playRafId) { cancelAnimationFrame(playRafId); playRafId = null; }
+      isPlaying = false;
+      scrubPlay.textContent = '▶';
+    }
+
+    function startPlay() {
+      isPlaying = true;
+      scrubPlay.textContent = '⏸';
+      const startMs = Number(scrubRange.value);
+      // If at end, restart from beginning
+      const fromMs = startMs >= scrubMaxMs ? 0 : startMs;
+      playStartWall = performance.now();
+      playStartMs   = fromMs;
+
+      function tick(now) {
+        const elapsed = now - playStartWall;
+        const t = playStartMs + elapsed;
+        if (t >= scrubMaxMs) {
+          setScrubT(scrubMaxMs);
+          stopPlay();
+          return;
+        }
+        setScrubT(t);
+        playRafId = requestAnimationFrame(tick);
+      }
+      playRafId = requestAnimationFrame(tick);
+    }
+
+    scrubPlay.addEventListener('click', () => {
+      if (isPlaying) stopPlay();
+      else startPlay();
+    });
 
     // --------- Download / Clear ----------
     function downloadJSON() {
@@ -909,6 +1067,7 @@
       if (document.body.classList.contains('calibrating')) return;
       trialSamples = []; trialScanpath = [];
       sampleCountEl.textContent = '0';
+      hideScrubber();
       redrawOverlay();
     });
 
