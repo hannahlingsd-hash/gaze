@@ -207,13 +207,17 @@
     </select>
 
     <div id="row">
-      <button id="downloadJson" type="button">Download JSON</button>
-      <button id="recalibrate" type="button">Recalibrate</button>
+      <button id="downloadJson" type="button">↓ JSON</button>
+      <button id="exportPng" type="button">↓ PNG</button>
     </div>
 
     <div id="row" style="margin-top:8px;">
-      <button id="clearData" type="button">Clear Data</button>
+      <button id="recalibrate" type="button">Recalibrate</button>
       <button id="stopNow" type="button">Stop</button>
+    </div>
+
+    <div id="row" style="margin-top:8px;">
+      <button id="clearData" type="button" style="grid-column:span 2">Clear Data</button>
     </div>
 
     <div id="tiny">
@@ -641,46 +645,134 @@
     function drawAOIGrid() {
       const r = getStimulusRect();
       ctx.save();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+
+      // Count dwell samples per cell
+      const counts = new Array(AOI_N * AOI_N).fill(0);
+      let maxCount = 0;
+      for (const s of trialSamples) {
+        if (s.valid && s.aoi) {
+          counts[s.aoi.id]++;
+          if (counts[s.aoi.id] > maxCount) maxCount = counts[s.aoi.id];
+        }
+      }
+
       const cellW = r.width  / AOI_N;
       const cellH = r.height / AOI_N;
+
+      // Draw heatmap fills (only if we have data)
+      if (maxCount > 0) {
+        for (let row = 0; row < AOI_N; row++) {
+          for (let col = 0; col < AOI_N; col++) {
+            const id = row * AOI_N + col;
+            const ratio = counts[id] / maxCount;
+            if (ratio > 0) {
+              ctx.fillStyle = `rgba(255, ${Math.round(120 - ratio*100)}, 0, ${0.15 + ratio * 0.5})`;
+              ctx.fillRect(r.left + col*cellW, r.top + row*cellH, cellW, cellH);
+            }
+          }
+        }
+      }
+
+      // Grid lines — always visible
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
       ctx.strokeRect(r.left, r.top, r.width, r.height);
       for (let i = 1; i < AOI_N; i++) {
         ctx.beginPath(); ctx.moveTo(r.left + cellW*i, r.top); ctx.lineTo(r.left + cellW*i, r.top + r.height); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(r.left, r.top + cellH*i); ctx.lineTo(r.left + r.width, r.top + cellH*i); ctx.stroke();
       }
+
+      // Labels — always show cell IDs, show counts only if data exists
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let row = 0; row < AOI_N; row++) {
+        for (let col = 0; col < AOI_N; col++) {
+          const id = row * AOI_N + col;
+          const cx = r.left + col*cellW + cellW/2;
+          const cy = r.top  + row*cellH + cellH/2;
+          ctx.font = '11px system-ui';
+          ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx.fillText(`R${row}C${col}`, cx, cy - 10);
+          ctx.font = 'bold 15px system-ui';
+          ctx.fillStyle = counts[id] > 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.2)';
+          ctx.fillText(String(counts[id]), cx, cy + 8);
+        }
+      }
+
       ctx.restore();
     }
 
     function drawRawTrail() {
       const pts = [];
-      for (let i = trialSamples.length-1; i >= 0 && pts.length < 120; i--) {
-        const s = trialSamples[i];
-        if (s && s.valid && typeof s.x_px === 'number') pts.push({x: s.x_px, y: s.y_px});
+      for (const s of trialSamples) {
+        if (s.valid && typeof s.x_px === 'number') pts.push({x: s.x_px, y: s.y_px});
       }
       if (pts.length < 2) return;
       ctx.save();
-      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+
+      // Fading trail oldest→newest
+      for (let i = 1; i < pts.length; i++) {
+        const alpha = 0.08 + 0.55 * (i / pts.length);
+        ctx.beginPath();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = `rgba(200,200,255,${alpha})`;
+        ctx.moveTo(pts[i-1].x, pts[i-1].y);
+        ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
+
+      // Green dot at START (first point)
+      ctx.fillStyle = 'rgba(80,255,170,0.95)';
+      ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 6, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 5, 0, Math.PI*2); ctx.fill();
+
+      // Red dot at END (last point) — this was the bug, pts[0] was wrong
+      const last = pts[pts.length - 1];
+      ctx.fillStyle = 'rgba(255,90,90,0.95)';
+      ctx.beginPath(); ctx.arc(last.x, last.y, 7, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+      ctx.stroke();
+
       ctx.restore();
     }
 
     function drawScanpath() {
       if (trialScanpath.length < 2) return;
       ctx.save();
-      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-      ctx.beginPath(); ctx.moveTo(trialScanpath[0].x_px, trialScanpath[0].y_px);
-      for (let i=1;i<trialScanpath.length;i++) ctx.lineTo(trialScanpath[i].x_px, trialScanpath[i].y_px);
+
+      // Dashed connecting lines
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(trialScanpath[0].x_px, trialScanpath[0].y_px);
+      for (let i=1; i<trialScanpath.length; i++) ctx.lineTo(trialScanpath[i].x_px, trialScanpath[i].y_px);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      for (let i=0;i<trialScanpath.length;i+=3) {
-        ctx.beginPath(); ctx.arc(trialScanpath[i].x_px, trialScanpath[i].y_px, 3, 0, Math.PI*2); ctx.fill();
+      ctx.setLineDash([]);
+
+      // Numbered fixation circles
+      for (let i = 0; i < trialScanpath.length; i++) {
+        const p = trialScanpath[i];
+        const isFirst = i === 0;
+        const isLast  = i === trialScanpath.length - 1;
+        const radius  = 12;
+
+        ctx.beginPath();
+        ctx.arc(p.x_px, p.y_px, radius, 0, Math.PI*2);
+        ctx.fillStyle = isFirst ? 'rgba(80,255,170,0.85)' : isLast ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.75)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.font = 'bold 10px system-ui';
+        ctx.fillStyle = '#000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(i + 1), p.x_px, p.y_px);
       }
+
       ctx.restore();
     }
 
@@ -727,6 +819,62 @@
     }
 
     downloadJsonBtn.addEventListener('click', downloadJSON);
+
+    function exportPNG() {
+      const mode = viewModeEl.value;
+      if (mode === 'none') {
+        alert('Select a view mode first (AOI Grid, Scanpath, or Raw Trail), then export.');
+        return;
+      }
+
+      // Create an offscreen canvas the same size as the screen
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const offscreen = document.createElement('canvas');
+      offscreen.width  = W;
+      offscreen.height = H;
+      const offCtx = offscreen.getContext('2d');
+
+      // Step 1: Draw the stimulus gradient as background
+      const grad = offCtx.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0,    '#0b0b1a');
+      grad.addColorStop(0.25, '#1d3b7a');
+      grad.addColorStop(0.5,  '#2bb3a3');
+      grad.addColorStop(0.75, '#f4d35e');
+      grad.addColorStop(1,    '#f95738');
+      offCtx.fillStyle = grad;
+      offCtx.fillRect(0, 0, W, H);
+
+      // Step 2: Copy the overlay canvas (which has the visualization drawn on it) on top
+      offCtx.drawImage(overlay, 0, 0);
+
+      // Step 3: Add a small legend label in the corner
+      const modeLabel = { aoi: 'AOI Heatmap', scanpath: 'Scanpath', raw: 'Raw Trail' }[mode] || mode;
+      const pid  = pidEl.value.trim()  || 'p';
+      const cond = condEl.value.trim() || 'cond';
+      const label = `${modeLabel} · ${pid} · ${cond}`;
+      offCtx.save();
+      offCtx.font = 'bold 13px system-ui';
+      const tw = offCtx.measureText(label).width;
+      offCtx.fillStyle = 'rgba(0,0,0,0.5)';
+      offCtx.fillRect(W - tw - 24, H - 32, tw + 16, 24);
+      offCtx.fillStyle = 'rgba(255,255,255,0.9)';
+      offCtx.textAlign = 'right';
+      offCtx.textBaseline = 'middle';
+      offCtx.fillText(label, W - 12, H - 20);
+      offCtx.restore();
+
+      // Step 4: Download
+      offscreen.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `webgazer_${pid}_${cond}_${mode}_${Date.now()}.png`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      }, 'image/png');
+    }
+
+    document.getElementById('exportPng').addEventListener('click', exportPNG);
 
     clearDataBtn.addEventListener('click', () => {
       if (isRecording) return;
