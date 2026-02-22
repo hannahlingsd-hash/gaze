@@ -259,12 +259,13 @@
 // ─────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────
-const KDE_GRID    = 160;   // internal density grid resolution
-const N_CONTOURS  = 10;    // number of iso-contour levels
-const MIN_LEVEL   = 0.08;  // skip near-zero noise
-const BANDWIDTH_FRAC = 0.07; // gaussian bandwidth as fraction of min(W,H)
-const CHAIKIN_PASSES = 3;  // smoothing passes on contour lines
-const MIN_CONTOUR_PTS = 4; // discard tiny fragments
+const KDE_GRID    = 160;
+const N_CONTOURS  = 18;
+const MIN_LEVEL   = 0.06;
+const BANDWIDTH_FRAC = 0.055;
+const CHAIKIN_PASSES = 4;
+const MIN_CONTOUR_PTS = 3;
+const FALLOFF_SQ  = (KDE_GRID * BANDWIDTH_FRAC * 6) ** 2;
 
 // Stimulus gradient stops (matching the WebGazer HTML)
 const GRAD_STOPS = [
@@ -565,6 +566,28 @@ function chaikin(pts, passes) {
 }
 
 // ─────────────────────────────────────────────
+// NEAREST FIXATION — returns {gradT, distSq, fixIdx}
+// ─────────────────────────────────────────────
+function buildFixationLookup(scanPts, W, H) {
+  return scanPts.map((p, i) => ({
+    gx:    (p.x_px / W) * KDE_GRID,
+    gy:    (p.y_px / H) * KDE_GRID,
+    gradT: p.x_px / W,
+    idx:   i,
+  }));
+}
+
+function nearestFixation(gx, gy, fixLookup) {
+  if (!fixLookup.length) return { gradT: 0.5, distSq: Infinity, idx: -1 };
+  let bestDistSq = Infinity, bestT = 0.5, bestIdx = 0;
+  for (const f of fixLookup) {
+    const d = (gx - f.gx) ** 2 + (gy - f.gy) ** 2;
+    if (d < bestDistSq) { bestDistSq = d; bestT = f.gradT; bestIdx = f.idx; }
+  }
+  return { gradT: bestT, distSq: bestDistSq, idx: bestIdx };
+}
+
+// ─────────────────────────────────────────────
 // MAIN RENDER
 // ─────────────────────────────────────────────
 function render(maxT) {
@@ -572,8 +595,6 @@ function render(maxT) {
   const H = canvas.height;
 
   ctx.clearRect(0, 0, W, H);
-
-  // White background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
 
@@ -581,7 +602,6 @@ function render(maxT) {
 
   const validSamples = session.samples.filter(s => s.t_ms <= maxT && s.valid);
   if (validSamples.length < 4) {
-    // Not enough data — show placeholder
     ctx.fillStyle = 'rgba(26,24,20,0.15)';
     ctx.font = '400 12px "DM Mono", monospace';
     ctx.textAlign = 'center';
@@ -592,11 +612,21 @@ function render(maxT) {
 
   const { field } = buildKDEField(session.samples, maxT);
 
-  // Convert grid coords → screen coords
   const toScreen = (gx, gy) => ({
     x: (gx / KDE_GRID) * W,
     y: (gy / KDE_GRID) * H,
   });
+
+  const scanPts  = session.scanpath.filter(p => p.t_ms <= maxT);
+  const fixLookup = buildFixationLookup(scanPts, W, H);
+
+  const dwells = scanPts.map((p, i) => {
+    const nextT = i < scanPts.length - 1 ? scanPts[i+1].t_ms : maxT;
+    return (nextT - p.t_ms) / 1000;
+  });
+
+  ctx.lineJoin = 'round';
+  ctx.lineCap  = 'round';
 
   // Build contour levels
   const levels = [];
@@ -604,67 +634,54 @@ function render(maxT) {
     levels.push(MIN_LEVEL + (1 - MIN_LEVEL) * (i / (N_CONTOURS - 1)));
   }
 
-  // Draw contours from outermost (low density) inward (high density)
-  // so inner rings paint over outer
   for (let li = 0; li < levels.length; li++) {
-    const level = levels[li];
-    const t_level = (level - MIN_LEVEL) / (1 - MIN_LEVEL); // 0=outer, 1=inner
+    const level   = levels[li];
+    const t_level = (level - MIN_LEVEL) / (1 - MIN_LEVEL);
 
     const chains = marchingSquares(field, level);
 
     for (const chain of chains) {
       if (chain.length < MIN_CONTOUR_PTS) continue;
-
       const smoothed = chaikin(chain, CHAIKIN_PASSES);
 
-      // Compute average x position of this chain → sample gradient color
-      let sumX = 0;
-      for (const p of smoothed) sumX += p.x;
-      const avgGx = sumX / smoothed.length;
-      const gradT = avgGx / KDE_GRID; // 0–1 horizontal
-      const col = sampleGradient(gradT);
+      // Draw segment by segment — each gets nearest-fixation color
+      let currentKey = null;
+      let segOpen    = false;
 
-      // Inner rings: more saturated, darker, thicker
-      // Outer rings: lighter, thinner, more transparent
-      const alpha    = 0.12 + t_level * 0.55;
-      const weight   = 0.4  + t_level * 1.2;
+      for (let i = 0; i < smoothed.length - 1; i++) {
+        const p0    = smoothed[i];
+        const p1    = smoothed[i + 1];
+        const midGx = (p0.x + p1.x) * 0.5;
+        const midGy = (p0.y + p1.y) * 0.5;
 
-      ctx.beginPath();
-      const s0 = toScreen(smoothed[0].x, smoothed[0].y);
-      ctx.moveTo(s0.x, s0.y);
-      for (let i = 1; i < smoothed.length; i++) {
-        const sp = toScreen(smoothed[i].x, smoothed[i].y);
-        ctx.lineTo(sp.x, sp.y);
+        const { gradT, distSq } = nearestFixation(midGx, midGy, fixLookup);
+        const col   = sampleGradient(gradT);
+
+        // Proximity factor — only affects alpha/weight, never suppresses
+        const proximity = Math.max(0.15, 1 - distSq / (FALLOFF_SQ * 2));
+        const alpha = (0.22 + t_level * 0.60) * proximity;
+        const lw    = (0.4  + t_level * 1.8)  * (0.5 + proximity * 0.5);
+
+        const key = `${col.r},${col.g},${col.b},${alpha.toFixed(2)},${lw.toFixed(2)}`;
+        const sp0 = toScreen(p0.x, p0.y);
+        const sp1 = toScreen(p1.x, p1.y);
+
+        if (key !== currentKey) {
+          if (segOpen) ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(sp0.x, sp0.y);
+          ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${alpha.toFixed(3)})`;
+          ctx.lineWidth   = lw;
+          currentKey = key;
+          segOpen    = true;
+        }
+        ctx.lineTo(sp1.x, sp1.y);
       }
-      // Close if near-loop
-      if (dist(smoothed[0], smoothed[smoothed.length-1]) < 0.5) ctx.closePath();
-
-      ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${alpha})`;
-      ctx.lineWidth   = weight;
-      ctx.lineJoin    = 'round';
-      ctx.lineCap     = 'round';
-      ctx.stroke();
+      if (segOpen) ctx.stroke();
     }
   }
 
-  // ── Draw scanpath nodes ──
-  const scanPts = session.scanpath.filter(p => p.t_ms <= maxT);
-  if (scanPts.length < 1) return;
-
-  // Compute dwell time per fixation (time to next fixation, or to end)
-  const dwells = scanPts.map((p, i) => {
-    const nextT = i < scanPts.length - 1 ? scanPts[i+1].t_ms : maxT;
-    return (nextT - p.t_ms) / 1000; // seconds
-  });
-
-  // Find peak density for each scanpath point (for node sizing)
-  const nodeField = (x, y) => {
-    const gx = Math.round((x / W) * (KDE_GRID - 1));
-    const gy = Math.round((y / H) * (KDE_GRID - 1));
-    return field[gy * KDE_GRID + gx] || 0;
-  };
-
-  // Draw thin connecting line first
+  // ── Thin scanpath line ──
   if (scanPts.length >= 2) {
     ctx.save();
     ctx.beginPath();
@@ -678,66 +695,63 @@ function render(maxT) {
     ctx.restore();
   }
 
-  // Draw nodes
+  // ── Fixation dots + labels (no arc rings — the contours ARE the rings) ──
+  const nodeField = (x, y) => {
+    const gx = Math.round((x / W) * (KDE_GRID - 1));
+    const gy = Math.round((y / H) * (KDE_GRID - 1));
+    return field[Math.max(0, Math.min(KDE_GRID * KDE_GRID - 1, gy * KDE_GRID + gx))] || 0;
+  };
+
   ctx.save();
   ctx.font = '300 10px "DM Mono", monospace';
 
   for (let i = 0; i < scanPts.length; i++) {
-    const p      = scanPts[i];
-    const dwell  = dwells[i];
+    const p       = scanPts[i];
+    const dwell   = dwells[i];
     const density = nodeField(p.x_px, p.y_px);
-    const gradT  = p.x_px / W;
-    const col    = sampleGradient(gradT);
+    const gradT   = p.x_px / W;
+    const col     = sampleGradient(gradT);
+    const radius  = 3 + density * 9;
 
-    // Node radius scales with density
-    const radius = 3 + density * 9;
-
-    // Outer ring
+    // Filled dot
     ctx.beginPath();
-    ctx.arc(p.x_px, p.y_px, radius + 3, 0, Math.PI*2);
-    ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},0.25)`;
-    ctx.lineWidth = 0.75;
-    ctx.stroke();
-
-    // Inner filled dot
-    ctx.beginPath();
-    ctx.arc(p.x_px, p.y_px, radius, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.85)`;
+    ctx.arc(p.x_px, p.y_px, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.95)`;
     ctx.fill();
 
-    // Label — fixation number + dwell time
-    const labelX = p.x_px + radius + 7;
-    const labelY = p.y_px - 2;
+    // White center pin
+    ctx.beginPath();
+    ctx.arc(p.x_px, p.y_px, radius * 0.38, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
 
-    // Tiny background pill for readability
-    const label1 = `#${i+1}`;
-    const label2 = `${dwell.toFixed(1)}s`;
-    const lw = Math.max(
-      ctx.measureText(label1).width,
-      ctx.measureText(label2).width
-    ) + 10;
+    // Label
+    const labelX  = p.x_px + radius + 8;
+    const labelY  = p.y_px;
+    const label1  = `#${i + 1}`;
+    const label2  = `${dwell.toFixed(1)}s`;
+    const pillW   = Math.max(ctx.measureText(label1).width, ctx.measureText(label2).width) + 10;
 
-    ctx.fillStyle = 'rgba(255,255,255,0.82)';
-    ctx.fillRect(labelX - 3, labelY - 12, lw, 24);
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillRect(labelX - 3, labelY - 14, pillW, 26);
 
-    ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.9)`;
+    ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},1.0)`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label1, labelX, labelY - 4);
+    ctx.fillText(label1, labelX, labelY - 5);
 
-    ctx.fillStyle = 'rgba(26,24,20,0.45)';
-    ctx.fillText(label2, labelX, labelY + 8);
+    ctx.fillStyle = 'rgba(26,24,20,0.5)';
+    ctx.fillText(label2, labelX, labelY + 7);
   }
   ctx.restore();
 
-  // ── Subtle metadata stamp ──
+  // Stamp
   ctx.save();
   ctx.font = '300 10px "DM Mono", monospace';
   ctx.fillStyle = 'rgba(26,24,20,0.18)';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
-  const stamp = `${session.participant_id || '—'} · ${session.condition || '—'} · ${fmt(maxT)}`;
-  ctx.fillText(stamp, W - 20, H - 60);
+  ctx.fillText(`${session.participant_id || '—'} · ${session.condition || '—'} · ${fmt(maxT)}`, W - 20, H - 60);
   ctx.restore();
 }
 
