@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+  
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>WebGazer Eye Tracker</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: #000;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    #stimulus {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, #0b0b1a 0%, #1d3b7a 25%, #2bb3a3 50%, #f4d35e 75%, #f95738 100%);
+      z-index: 1;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    #startBtn {
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 14px 18px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.35);
+      color: rgba(255,255,255,0.9);
+      font-size: 16px;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      user-select: none;
+      z-index: 5;
+    }
+    #startBtn:hover { background: rgba(0,0,0,0.5); }
+    #startBtn:disabled { opacity: 0.55; cursor: default; }
+
+    /* hotspot to reveal panel */
+    #hotspot {
+      position: absolute;
+      left: 0; top: 0;
+      width: 44px; height: 44px;
+      background: rgba(255,255,255,0.0);
+      z-index: 10;
+    }
+
+    #panel {
+      position: absolute;
+      left: 8px; top: 8px;
+      width: 280px;
+      padding: 10px 10px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.92);
+      z-index: 11;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    #panel.visible { opacity: 1; pointer-events: auto; }
+    #panel label { display:block; font-size: 12px; opacity: 0.85; margin-top: 8px; margin-bottom: 4px; }
+    #panel input, #panel select, #panel button {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.92);
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+    #panel select {
+      background: #1a1a2e;
+      color: #fff;
+    }
+    #panel select option {
+      background: #1a1a2e;
+      color: #fff;
+    }
+    #panel button { cursor:pointer; background: rgba(255,255,255,0.10); }
+    #panel button:hover { background: rgba(255,255,255,0.14); }
+
+    #row { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+
+    #tiny { margin-top: 8px; font-size: 12px; opacity: 0.8; line-height: 1.3; }
+    #statusDot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.25);
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .running #statusDot { background: rgba(80,255,170,0.85); }
+    .stopped #statusDot { background: rgba(255,220,120,0.85); }
+    .calibrating #statusDot { background: rgba(130,190,255,0.9); }
+
+    /* Hide panel during recording or calibration */
+    body.recording #panel, body.calibrating #panel {
+      opacity: 0 !important; pointer-events: none !important;
+    }
+    body.recording #hotspot, body.calibrating #hotspot { pointer-events: none; }
+
+    /* During recording, hide WebGazer's prediction dot overlay */
+    body.recording #webgazerVideoFeed,
+    body.recording #webgazerFaceOverlay,
+    body.recording #webgazerFaceFeedbackBox,
+    body.recording #webgazer-prediction-point-canvas { display: none !important; }
+
+    /* Never let WebGazer's dot intercept mouse clicks */
+    #webgazer-prediction-point-canvas,
+    #webgazerGazeDot,
+    .webgazerGazeDot { pointer-events: none !important; }
+
+    /* ---- Calibration layer ---- */
+    #calibLayer {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      display: none;
+      pointer-events: none;
+    }
+    body.calibrating #calibLayer { display: block; }
+
+    #calibMsg {
+      position: absolute;
+      left: 50%;
+      top: 5%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.85);
+      font-size: 14px;
+      background: rgba(0,0,0,0.45);
+      padding: 8px 16px;
+      border-radius: 999px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .calibDot {
+      position: absolute;
+      width: 26px; height: 26px;
+      border-radius: 999px;
+      transform: translate(-50%, -50%);
+      border: 2px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.12);
+      box-shadow: 0 0 0 8px rgba(255,255,255,0.05);
+      pointer-events: none;
+      cursor: default;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+    .calibDot.done {
+      border-color: rgba(80,255,170,0.9);
+      background: rgba(80,255,170,0.15);
+      box-shadow: 0 0 0 8px rgba(80,255,170,0.10);
+    }
+    .calibDot.active {
+      border-color: #fff;
+      border-width: 3px;
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 6px rgba(255,255,255,0.35), 0 0 0 18px rgba(255,255,255,0.12), 0 0 32px 8px rgba(255,255,255,0.25);
+      pointer-events: auto;
+      cursor: pointer;
+      animation: pulse 0.8s ease-in-out infinite;
+      z-index: 99;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 6px rgba(255,255,255,0.35), 0 0 0 18px rgba(255,255,255,0.12), 0 0 32px 8px rgba(255,255,255,0.2); }
+      50%       { box-shadow: 0 0 0 10px rgba(255,255,255,0.5), 0 0 0 28px rgba(255,255,255,0.18), 0 0 48px 12px rgba(255,255,255,0.35); }
+    }
+    /* progress ring */
+    .calibDot::after {
+      content: "";
+      position: absolute; inset: -7px;
+      border-radius: 999px;
+      background: conic-gradient(rgba(255,255,255,0.8) var(--p,0%), rgba(255,255,255,0.1) 0);
+      -webkit-mask: radial-gradient(circle, transparent 52%, #000 53%);
+              mask: radial-gradient(circle, transparent 52%, #000 53%);
+      pointer-events: none;
+    }
+    /* ---- Temporal scrubber ---- */
+    #scrubber {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 10px 20px 14px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(255,255,255,0.12);
+      z-index: 12;
+      display: none;
+      align-items: center;
+      gap: 12px;
+    }
+    #scrubber.visible { display: flex; }
+    body.recording #scrubber, body.calibrating #scrubber { display: none !important; }
+
+    #scrubTime {
+      font-size: 12px;
+      color: rgba(255,255,255,0.75);
+      white-space: nowrap;
+      min-width: 80px;
+      font-variant-numeric: tabular-nums;
+    }
+    #scrubPlay {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      border-radius: 999px;
+      width: 30px; height: 30px;
+      font-size: 12px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #scrubPlay:hover { background: rgba(255,255,255,0.18); }
+
+    #scrubRange {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.2);
+      outline: none;
+      cursor: pointer;
+    }
+    #scrubRange::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 0 0 4px rgba(0,0,0,0.4);
+    }
+    #scrubRange::-moz-range-thumb {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    #scrubDuration {
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      white-space: nowrap;
+      min-width: 40px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="stopped">
+  <div id="stimulus"></div>
+  <canvas id="overlay" width="1439" height="765" style="width: 1439px; height: 765px;"></canvas>
+
+  <button id="startBtn" type="button" style="display: block;">Start (30s)</button>
+
+  <!-- Temporal scrubber — shown after trial ends -->
+  <div id="scrubber" class="visible">
+    <button id="scrubPlay" title="Play/Pause">▶</button>
+    <span id="scrubTime">30.0s</span>
+    <input id="scrubRange" type="range" min="0" max="30010" value="0" step="100">
+    <span id="scrubDuration">30.0s</span>
+  </div>
+
+  <div id="calibLayer" aria-hidden="true">
+    <div id="calibMsg">Click the highlighted dot — 1 point left</div>
+  </div>
+
+  <div id="hotspot" aria-hidden="true"></div>
+  <div id="panel" role="region" aria-label="Controls" class="">
+    <label>Participant ID</label>
+    <input id="pid" type="text" value="p01">
+
+    <label>Condition</label>
+    <input id="cond" type="text" value="baseline">
+
+    <label>View Mode</label>
+    <select id="viewMode">
+      <option value="none">None</option>
+      <option value="aoi">AOI Grid (4×4)</option>
+      <option value="kde">KDE Density</option>
+      <option value="scanpath">Scanpath</option>
+      <option value="raw">Raw Trail</option>
+    </select>
+
+    <div id="row">
+      <button id="downloadJson" type="button">↓ JSON</button>
+      <button id="exportPng" type="button">↓ PNG</button>
+    </div>
+
+    <div id="row" style="margin-top:8px;">
+      <button id="exportSession" type="button">↓ Export Session</button>
+      <button id="loadSession" type="button">↑ Load Session</button>
+    </div>
+    <input id="sessionFileInput" type="file" accept=".wgz,.json" style="display:none">
+
+    <div id="row" style="margin-top:8px;">
+      <button id="recalibrate" type="button">Recalibrate</button>
+      <button id="stopNow" type="button">Stop</button>
+    </div>
+
+    <div id="row" style="margin-top:8px;">
+      <button id="clearData" type="button" style="grid-column:span 2">Clear Data</button>
+    </div>
+
+    <div id="row" style="margin-top:8px;">
+      <button id="uploadStimulusBtn" type="button" style="grid-column:span 2; opacity:0.6; font-size:11px;">⬆ Upload Stimulus Image</button>
+    </div>
+    <div id="stimulusNote" style="font-size:10px;opacity:0.45;margin-top:4px;line-height:1.3;display:none;">
+      Image loaded. <span id="resetStimulus" style="cursor:pointer;text-decoration:underline;">Reset to gradient</span>
+    </div>
+    <input id="stimulusFileInput" type="file" accept="image/*" style="display:none">
+
+    <div id="tiny">
+      <span id="statusDot"></span><span id="statusText">Stopped</span><br>
+      Calib: <span id="calibText">done ✓</span><br>
+      Samples (this trial): <span id="sampleCount">300</span>
+    </div>
+  </div>
+
+  <script src="webgazer.js"></script>
+
+  <script>
+    // --------- Experiment params ----------
+    const TRIAL_MS = 30000;
+    const SAMPLE_EVERY_MS = 100;
+    const AOI_N = 4;
+
+    // --------- Calibration params ----------
+    const CALIB_CLICKS_PER_POINT = 5;
+    const CALIB_PCTS = [10, 50, 90];
+
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
+
+    const startBtn    = document.getElementById('startBtn');
+    const calibLayer  = document.getElementById('calibLayer');
+    const calibMsg    = document.getElementById('calibMsg');
+
+    const hotspot     = document.getElementById('hotspot');
+    const panel       = document.getElementById('panel');
+
+    const pidEl       = document.getElementById('pid');
+    const condEl      = document.getElementById('cond');
+    const viewModeEl  = document.getElementById('viewMode');
+
+    const downloadJsonBtn = document.getElementById('downloadJson');
+    const clearDataBtn    = document.getElementById('clearData');
+    const recalibrateBtn  = document.getElementById('recalibrate');
+    const stopNowBtn      = document.getElementById('stopNow');
+
+    const statusText    = document.getElementById('statusText');
+    const sampleCountEl = document.getElementById('sampleCount');
+    const calibTextEl   = document.getElementById('calibText');
+
+    let isRecording = false;
+    let trialStartPerf = null;
+    let sampleTimer = null;
+    let stopTimer = null;
+
+    let webgazerReady = false;
+    let latestGaze = null;
+
+    let trialSamples  = [];
+    let trialScanpath = [];
+
+    // Calibration state
+    let calibrated  = false;
+    let calibPoints = [];
+    let calibIndex  = 0;
+
+    // --------- Panel hover ----------
+    let hidePanelTimer = null;
+    function showPanel() {
+      if (document.body.classList.contains('recording'))   return;
+      if (document.body.classList.contains('calibrating')) return;
+      panel.classList.add('visible');
+      if (hidePanelTimer) clearTimeout(hidePanelTimer);
+    }
+    function scheduleHidePanel() {
+      if (document.body.classList.contains('recording'))   return;
+      if (document.body.classList.contains('calibrating')) return;
+      if (hidePanelTimer) clearTimeout(hidePanelTimer);
+      hidePanelTimer = setTimeout(() => panel.classList.remove('visible'), 180);
+    }
+    hotspot.addEventListener('mouseenter', showPanel);
+    hotspot.addEventListener('mouseleave', scheduleHidePanel);
+    panel.addEventListener('mouseenter', showPanel);
+    panel.addEventListener('mouseleave', scheduleHidePanel);
+
+    // --------- Canvas sizing ----------
+    function resize() {
+      overlay.width  = window.innerWidth;
+      overlay.height = window.innerHeight;
+      overlay.style.width  = window.innerWidth  + 'px';
+      overlay.style.height = window.innerHeight + 'px';
+      ctx.setTransform(1,0,0,1,0,0);
+      redrawOverlay();
+      layoutCalibrationDots();
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function getStimulusRect() {
+      return document.getElementById('stimulus').getBoundingClientRect();
+    }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    function computeAOI(xRel, yRel, w, h) {
+      const col = clamp(Math.floor((xRel / w) * AOI_N), 0, AOI_N - 1);
+      const row = clamp(Math.floor((yRel / h) * AOI_N), 0, AOI_N - 1);
+      return { row, col, id: row * AOI_N + col };
+    }
+
+    // --------- WebGazer helpers ----------
+
+    /**
+     * Show or hide the WebGazer prediction dot.
+     * We call this AFTER begin() settles.
+     */
+    function setPredictionDotVisible(visible) {
+      try {
+        if (typeof webgazer.showPredictionPoints === 'function') {
+          webgazer.showPredictionPoints(visible);
+        }
+      } catch(e) {}
+
+      const sel = '#webgazer-prediction-point-canvas, #webgazerGazeDot, .webgazerGazeDot';
+      document.querySelectorAll(sel).forEach(el => {
+        el.style.display = visible ? '' : 'none';
+        el.style.pointerEvents = 'none'; // never block clicks
+      });
+    }
+
+    async function initWebGazer(showDot) {
+      if (webgazerReady) {
+        setPredictionDotVisible(showDot);
+        return;
+      }
+
+      // Tell WebGazer not to save/restore data across page loads
+      // (avoids stale regression data polluting a fresh calibration)
+      webgazer.params.saveDataAcrossSessions = false;
+
+      webgazer.setGazeListener((data) => {
+        if (!data) return;
+        latestGaze = {
+          x: data.x,
+          y: data.y,
+          confidence: (typeof data.confidence === 'number') ? data.confidence : null
+        };
+      });
+
+      await webgazer.begin();
+
+      // Hide camera preview & face overlays — always
+      webgazer.showVideo(false);
+      webgazer.showFaceOverlay(false);
+      webgazer.showFaceFeedbackBox(false);
+
+      // Set regression model
+      try { webgazer.setRegression('ridge'); }    catch(e) {}
+      try { webgazer.setTracker('clmtrackr'); }   catch(e) {}
+
+      // Allow one frame for WebGazer to inject its canvas into the DOM
+      await new Promise(r => setTimeout(r, 50));
+
+      setPredictionDotVisible(showDot);
+
+      webgazerReady = true;
+    }
+
+    function hardStopWebgazer() {
+      try { webgazer.end(); } catch(e) {}
+      webgazerReady = false;
+      latestGaze = null;
+    }
+
+    // --------- Calibration UI ----------
+
+    function buildCalibrationDots() {
+      // Remove old dots but keep the instruction message
+      calibLayer.querySelectorAll('.calibDot').forEach(el => el.remove());
+      calibPoints = [];
+      calibIndex  = 0;
+
+      for (const py of CALIB_PCTS) {
+        for (const px of CALIB_PCTS) {
+          const el = document.createElement('div');
+          el.className = 'calibDot';
+          el.dataset.px = String(px);
+          el.dataset.py = String(py);
+          el.style.setProperty('--p', '0%');
+          el.addEventListener('click', onCalibDotClick);
+          calibLayer.appendChild(el);
+
+          calibPoints.push({ pctX: px, pctY: py, x: 0, y: 0, clicks: 0, done: false, el });
+        }
+      }
+      layoutCalibrationDots();
+      updateActiveCalibDot();
+    }
+
+    function layoutCalibrationDots() {
+      if (!calibPoints.length) return;
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      for (const p of calibPoints) {
+        p.x = Math.round((p.pctX / 100) * W);
+        p.y = Math.round((p.pctY / 100) * H);
+        p.el.style.left = p.x + 'px';
+        p.el.style.top  = p.y + 'px';
+      }
+    }
+
+    function updateActiveCalibDot() {
+      calibPoints.forEach((p, i) => {
+        p.el.classList.toggle('active', i === calibIndex && !p.done);
+      });
+
+      const remaining = calibPoints.filter(p => !p.done).length;
+      if (calibIndex < calibPoints.length) {
+        const cur = calibPoints[calibIndex];
+        calibMsg.textContent = `Click the highlighted dot — ${remaining} point${remaining !== 1 ? 's' : ''} left`;
+      }
+    }
+
+    function onCalibDotClick(e) {
+      const p = calibPoints[calibIndex];
+      if (!p || e.currentTarget !== p.el) return;
+
+      // ---- KEY FIX: use webgazer.recordScreenPosition ----
+      // In webgazer v2, this is the correct way to add a training sample.
+      // We pass the screen coordinates of this calibration point.
+      try {
+        webgazer.recordScreenPosition(p.x, p.y, 'click');
+      } catch(err) {
+        // Fallback: some builds expose it differently
+        try {
+          const regression = webgazer.getRegression();
+          if (regression && typeof regression.addData === 'function') {
+            const features = webgazer.getCurrentPrediction();
+            // best-effort; recordScreenPosition is preferred
+          }
+        } catch(e2) {}
+      }
+
+      p.clicks += 1;
+      const prog = Math.min(1, p.clicks / CALIB_CLICKS_PER_POINT);
+      p.el.style.setProperty('--p', (prog * 100).toFixed(0) + '%');
+
+      if (p.clicks >= CALIB_CLICKS_PER_POINT) {
+        p.done = true;
+        p.el.classList.add('done');
+        p.el.classList.remove('active');
+
+        let next = calibIndex + 1;
+        while (next < calibPoints.length && calibPoints[next].done) next++;
+        calibIndex = next;
+
+        if (calibIndex >= calibPoints.length) {
+          finishCalibration();
+        } else {
+          updateActiveCalibDot();
+        }
+      }
+    }
+
+    async function beginCalibration() {
+      if (isRecording) return;
+
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting camera…';
+
+      try {
+        // showDot = true so the red dot is visible during calibration
+        await initWebGazer(true);
+      } catch (e) {
+        console.error(e);
+        startBtn.disabled = false;
+        startBtn.textContent = 'Calibrate';
+        alert('WebGazer failed to start. Please allow camera access and try again.');
+        return;
+      }
+
+      document.body.classList.remove('stopped', 'running', 'recording');
+      document.body.classList.add('calibrating');
+      statusText.textContent = 'Calibrating…';
+
+      calibrated = false;
+      calibTextEl.textContent = 'in progress';
+
+      buildCalibrationDots();
+      startBtn.style.display = 'none';
+    }
+
+    function finishCalibration() {
+      calibrated = true;
+      document.body.classList.remove('calibrating');
+      document.body.classList.add('stopped');
+      statusText.textContent = 'Idle';
+      calibTextEl.textContent = 'done ✓';
+
+      // Hide the red prediction dot now that calibration is done
+      setPredictionDotVisible(false);
+
+      calibLayer.querySelectorAll('.calibDot').forEach(el => el.remove());
+
+      startBtn.style.display = 'block';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start (30s)';
+    }
+
+    function resetCalibration() {
+      calibrated = false;
+      calibTextEl.textContent = 'not done';
+      try { webgazer.clearData(); } catch(e) {}
+      hardStopWebgazer();
+
+      startBtn.style.display = 'block';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Calibrate';
+
+      document.body.classList.remove('calibrating');
+      calibLayer.querySelectorAll('.calibDot').forEach(el => el.remove());
+      redrawOverlay();
+    }
+
+    // --------- Trial recording ----------
+    async function startTrial() {
+      if (isRecording) return;
+      if (!calibrated) { await beginCalibration(); return; }
+
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting…';
+
+      try {
+        // Re-init WebGazer (was stopped after last trial); keep red dot hidden
+        await initWebGazer(false);
+      } catch (e) {
+        console.error(e);
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start (30s)';
+        alert('WebGazer init failed. Check camera permissions.');
+        return;
+      }
+
+      trialSamples  = [];
+      trialScanpath = [];
+      sampleCountEl.textContent = '0';
+      hideScrubber();
+
+      isRecording = true;
+      document.body.classList.add('recording');
+      document.body.classList.remove('stopped');
+      document.body.classList.add('running');
+      statusText.textContent = 'Recording…';
+
+      startBtn.style.display = 'none';
+      viewModeEl.value = 'none';
+      redrawOverlay();
+
+      trialStartPerf = performance.now();
+
+      sampleTimer = setInterval(() => {
+        const r   = getStimulusRect();
+        const t_ms = Math.round(performance.now() - trialStartPerf);
+
+        let x = null, y = null, conf = null;
+        let valid = false;
+        let x_rel = null, y_rel = null, x_norm = null, y_norm = null;
+        let aoi = null;
+
+        if (latestGaze && typeof latestGaze.x === 'number') {
+          x = latestGaze.x;
+          y = latestGaze.y;
+          conf = latestGaze.confidence;
+          x_rel = x - r.left;
+          y_rel = y - r.top;
+          const inBounds = (x_rel >= 0 && x_rel <= r.width && y_rel >= 0 && y_rel <= r.height);
+          valid = inBounds;
+          if (valid) {
+            x_norm = x_rel / r.width;
+            y_norm = y_rel / r.height;
+            const a = computeAOI(x_rel, y_rel, r.width, r.height);
+            aoi = { id: a.id, row: a.row, col: a.col, n: AOI_N };
+          }
+        }
+
+        trialSamples.push({
+          participant_id: pidEl.value.trim() || null,
+          condition:      condEl.value.trim() || null,
+          t_ms, x_px: x, y_px: y,
+          x_rel_px: x_rel, y_rel_px: y_rel,
+          x_norm, y_norm, conf, valid, aoi
+        });
+
+        sampleCountEl.textContent = String(trialSamples.length);
+      }, SAMPLE_EVERY_MS);
+
+      stopTimer = setTimeout(stopTrial, TRIAL_MS);
+    }
+
+    function stopTrial() {
+      if (!isRecording) return;
+      isRecording = false;
+
+      document.body.classList.remove('recording', 'running');
+      document.body.classList.add('stopped');
+      statusText.textContent = 'Stopped';
+
+      if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
+      if (stopTimer)   { clearTimeout(stopTimer);    stopTimer   = null; }
+
+      trialScanpath = [];
+      let lastT = -Infinity;
+      for (const s of trialSamples) {
+        if (!s.valid || typeof s.x_px !== 'number') continue;
+        if (s.t_ms - lastT < 200) continue;
+        trialScanpath.push({ t_ms: s.t_ms, x_px: s.x_px, y_px: s.y_px });
+        lastT = s.t_ms;
+      }
+
+      hardStopWebgazer();
+
+      const actualDuration = trialSamples.length > 0 ? trialSamples[trialSamples.length-1].t_ms : TRIAL_MS;
+      showScrubber(actualDuration);
+
+      startBtn.style.display = 'block';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start (30s)';
+
+      redrawOverlay();
+    }
+    function clearCanvas() { ctx.clearRect(0,0,overlay.width,overlay.height); }
+
+    function drawAOIGrid(maxT = Infinity) {
+      const r = getStimulusRect();
+      ctx.save();
+
+      const counts = new Array(AOI_N * AOI_N).fill(0);
+      let maxCount = 0;
+      for (const s of trialSamples) {
+        if (s.t_ms > maxT) break;
+        if (s.valid && s.aoi) {
+          counts[s.aoi.id]++;
+          if (counts[s.aoi.id] > maxCount) maxCount = counts[s.aoi.id];
+        }
+      }
+
+      const cellW = r.width  / AOI_N;
+      const cellH = r.height / AOI_N;
+
+      if (maxCount > 0) {
+        for (let row = 0; row < AOI_N; row++) {
+          for (let col = 0; col < AOI_N; col++) {
+            const id = row * AOI_N + col;
+            const ratio = counts[id] / maxCount;
+            if (ratio > 0) {
+              ctx.fillStyle = `rgba(255, ${Math.round(120 - ratio*100)}, 0, ${0.15 + ratio * 0.5})`;
+              ctx.fillRect(r.left + col*cellW, r.top + row*cellH, cellW, cellH);
+            }
+          }
+        }
+      }
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.strokeRect(r.left, r.top, r.width, r.height);
+      for (let i = 1; i < AOI_N; i++) {
+        ctx.beginPath(); ctx.moveTo(r.left + cellW*i, r.top); ctx.lineTo(r.left + cellW*i, r.top + r.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(r.left, r.top + cellH*i); ctx.lineTo(r.left + r.width, r.top + cellH*i); ctx.stroke();
+      }
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let row = 0; row < AOI_N; row++) {
+        for (let col = 0; col < AOI_N; col++) {
+          const id = row * AOI_N + col;
+          const cx = r.left + col*cellW + cellW/2;
+          const cy = r.top  + row*cellH + cellH/2;
+          ctx.font = '11px system-ui';
+          ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx.fillText(`R${row}C${col}`, cx, cy - 10);
+          ctx.font = 'bold 15px system-ui';
+          ctx.fillStyle = counts[id] > 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.2)';
+          ctx.fillText(String(counts[id]), cx, cy + 8);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function drawRawTrail(maxT = Infinity) {
+      const pts = [];
+      for (const s of trialSamples) {
+        if (s.t_ms > maxT) break;
+        if (s.valid && typeof s.x_px === 'number') pts.push({x: s.x_px, y: s.y_px});
+      }
+      if (pts.length < 2) return;
+      ctx.save();
+
+      for (let i = 1; i < pts.length; i++) {
+        const alpha = 0.08 + 0.55 * (i / pts.length);
+        ctx.beginPath();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = `rgba(200,200,255,${alpha})`;
+        ctx.moveTo(pts[i-1].x, pts[i-1].y);
+        ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = 'rgba(80,255,170,0.95)';
+      ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 6, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+
+      const last = pts[pts.length - 1];
+      ctx.fillStyle = 'rgba(255,90,90,0.95)';
+      ctx.beginPath(); ctx.arc(last.x, last.y, 7, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawScanpath(maxT = Infinity) {
+      const pts = trialScanpath.filter(p => p.t_ms <= maxT);
+      if (pts.length < 2) return;
+      ctx.save();
+
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x_px, pts[0].y_px);
+      for (let i=1; i<pts.length; i++) ctx.lineTo(pts[i].x_px, pts[i].y_px);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        const isFirst = i === 0;
+        const isLast  = i === pts.length - 1;
+        ctx.beginPath();
+        ctx.arc(p.x_px, p.y_px, 12, 0, Math.PI*2);
+        ctx.fillStyle = isFirst ? 'rgba(80,255,170,0.85)' : isLast ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.75)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 1; ctx.stroke();
+
+        ctx.font = 'bold 10px system-ui';
+        ctx.fillStyle = '#000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(i + 1), p.x_px, p.y_px);
+      }
+
+      ctx.restore();
+    }
+
+    // --------- KDE Density Map ----------
+    // Resolution of the internal density grid — higher = smoother but slower
+    const KDE_GRID = 120;
+
+    function buildKDEField(samples, maxT) {
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const field = new Float32Array(KDE_GRID * KDE_GRID);
+
+      // Bandwidth: ~8% of the smaller screen dimension
+      const bw = Math.min(W, H) * 0.08;
+      const bw2 = bw * bw;
+
+      for (const s of samples) {
+        if (s.t_ms > maxT) break;
+        if (!s.valid || typeof s.x_px !== 'number') continue;
+
+        // Map gaze coords to grid
+        const gx = (s.x_px / W) * KDE_GRID;
+        const gy = (s.y_px / H) * KDE_GRID;
+
+        // Radius in grid cells to evaluate gaussian
+        const bwCellsX = (bw / W) * KDE_GRID;
+        const bwCellsY = (bw / H) * KDE_GRID;
+        const r = Math.ceil(bwCellsX * 2.5);
+
+        const x0 = Math.max(0, Math.floor(gx - r));
+        const x1 = Math.min(KDE_GRID - 1, Math.ceil(gx + r));
+        const y0 = Math.max(0, Math.floor(gy - r));
+        const y1 = Math.min(KDE_GRID - 1, Math.ceil(gy + r));
+
+        for (let cy = y0; cy <= y1; cy++) {
+          for (let cx = x0; cx <= x1; cx++) {
+            // Convert back to screen space for distance
+            const sx = (cx / KDE_GRID) * W;
+            const sy = (cy / KDE_GRID) * H;
+            const dx = sx - s.x_px;
+            const dy = sy - s.y_px;
+            const d2 = dx*dx + dy*dy;
+            field[cy * KDE_GRID + cx] += Math.exp(-d2 / (2 * bw2));
+          }
+        }
+      }
+
+      // Normalize to 0–1
+      let maxVal = 0;
+      for (let i = 0; i < field.length; i++) if (field[i] > maxVal) maxVal = field[i];
+      if (maxVal > 0) for (let i = 0; i < field.length; i++) field[i] /= maxVal;
+
+      return field;
+    }
+
+    function drawKDE(maxT = Infinity) {
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+
+      const validSamples = trialSamples.filter(s => s.t_ms <= maxT && s.valid && typeof s.x_px === 'number');
+      if (validSamples.length < 3) return;
+
+      const field = buildKDEField(trialSamples, maxT);
+
+      // Render to an offscreen ImageData for speed
+      const cellW = W / KDE_GRID;
+      const cellH = H / KDE_GRID;
+
+      ctx.save();
+
+      // Draw density as colored cells — color ramps from transparent → teal → yellow → red
+      for (let cy = 0; cy < KDE_GRID; cy++) {
+        for (let cx = 0; cx < KDE_GRID; cx++) {
+          const v = field[cy * KDE_GRID + cx];
+          if (v < 0.01) continue;
+
+          // Color: low = cool blue, mid = teal/green, high = yellow, peak = red
+          let r, g, b, a;
+          if (v < 0.25) {
+            const t = v / 0.25;
+            r = Math.round(20  + t * 20);
+            g = Math.round(80  + t * 120);
+            b = Math.round(180 + t * 40);
+            a = 0.3 + t * 0.3;
+          } else if (v < 0.55) {
+            const t = (v - 0.25) / 0.30;
+            r = Math.round(40  + t * 200);
+            g = Math.round(200 + t * 30);
+            b = Math.round(220 - t * 180);
+            a = 0.6 + t * 0.15;
+          } else if (v < 0.80) {
+            const t = (v - 0.55) / 0.25;
+            r = Math.round(240 + t * 15);
+            g = Math.round(230 - t * 100);
+            b = Math.round(40  - t * 30);
+            a = 0.75 + t * 0.1;
+          } else {
+            const t = (v - 0.80) / 0.20;
+            r = 255;
+            g = Math.round(130 - t * 110);
+            b = Math.round(10  - t * 10);
+            a = 0.85 + t * 0.1;
+          }
+
+          ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+          ctx.fillRect(
+            Math.floor(cx * cellW),
+            Math.floor(cy * cellH),
+            Math.ceil(cellW) + 1,
+            Math.ceil(cellH) + 1
+          );
+        }
+      }
+
+      // Draw scanpath on top so you can see the trajectory through the density field
+      const scanPts = trialScanpath.filter(p => p.t_ms <= maxT);
+      if (scanPts.length >= 2) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(scanPts[0].x_px, scanPts[0].y_px);
+        for (let i = 1; i < scanPts.length; i++) ctx.lineTo(scanPts[i].x_px, scanPts[i].y_px);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Dots at each fixation
+        for (let i = 0; i < scanPts.length; i++) {
+          const p = scanPts[i];
+          const isFirst = i === 0;
+          const isLast  = i === scanPts.length - 1;
+          ctx.beginPath();
+          ctx.arc(p.x_px, p.y_px, isFirst || isLast ? 6 : 4, 0, Math.PI*2);
+          ctx.fillStyle = isFirst ? 'rgba(80,255,170,0.95)' : isLast ? 'rgba(255,90,90,0.95)' : 'rgba(255,255,255,0.85)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      // Small legend in corner
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const legendX = 16;
+      let legendY = H - 80;
+      const steps = [
+        { label: 'Low',  color: 'rgba(20,100,200,0.7)' },
+        { label: 'Mid',  color: 'rgba(40,200,180,0.8)' },
+        { label: 'High', color: 'rgba(255,200,20,0.85)' },
+        { label: 'Peak', color: 'rgba(255,30,10,0.9)' },
+      ];
+      for (const s of steps) {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(legendX - 2, legendY - 7, 80, 16);
+        ctx.fillStyle = s.color;
+        ctx.fillRect(legendX, legendY - 5, 12, 12);
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.fillText(s.label, legendX + 18, legendY + 1);
+        legendY += 18;
+      }
+
+      ctx.restore();
+    }
+
+    function redrawOverlay(maxT) {
+      clearCanvas();
+      if (document.body.classList.contains('recording'))   return;
+      if (document.body.classList.contains('calibrating')) return;
+      const t = (maxT !== undefined) ? maxT : Infinity;
+      const mode = viewModeEl.value;
+      if (mode === 'aoi')      drawAOIGrid(t);
+      if (mode === 'kde')      drawKDE(t);
+      if (mode === 'raw')      drawRawTrail(t);
+      if (mode === 'scanpath') drawScanpath(t);
+    }
+
+    viewModeEl.addEventListener('change', () => {
+      const mode = viewModeEl.value;
+      if (mode !== 'none' && trialSamples.length > 0) {
+        const dur = trialSamples[trialSamples.length - 1].t_ms;
+        showScrubber(dur);
+      } else if (mode === 'none') {
+        hideScrubber();
+      }
+      redrawOverlay(getCurrentScrubT());
+    });
+
+    // --------- Scrubber ----------
+    const scrubberEl   = document.getElementById('scrubber');
+    const scrubRange   = document.getElementById('scrubRange');
+    const scrubTime    = document.getElementById('scrubTime');
+    const scrubDuration = document.getElementById('scrubDuration');
+    const scrubPlay    = document.getElementById('scrubPlay');
+
+    let scrubMaxMs  = TRIAL_MS;
+    let playRafId   = null;
+    let playStartWall = null;
+    let playStartMs   = 0;
+    let isPlaying   = false;
+
+    function fmt(ms) {
+      return (ms / 1000).toFixed(1) + 's';
+    }
+
+    function getCurrentScrubT() {
+      if (!scrubberEl.classList.contains('visible')) return Infinity;
+      return Number(scrubRange.value);
+    }
+
+    function setScrubT(ms) {
+      const clamped = Math.max(0, Math.min(scrubMaxMs, ms));
+      scrubRange.value = clamped;
+      scrubTime.textContent = fmt(clamped);
+      redrawOverlay(clamped);
+    }
+
+    function showScrubber(durationMs) {
+      scrubMaxMs = durationMs;
+      scrubRange.max = durationMs;
+      scrubRange.value = durationMs;
+      scrubDuration.textContent = fmt(durationMs);
+      scrubTime.textContent = fmt(durationMs);
+      scrubberEl.classList.add('visible');
+    }
+
+    function hideScrubber() {
+      stopPlay();
+      scrubberEl.classList.remove('visible');
+    }
+
+    scrubRange.addEventListener('input', () => {
+      stopPlay();
+      setScrubT(Number(scrubRange.value));
+    });
+
+    function stopPlay() {
+      if (playRafId) { cancelAnimationFrame(playRafId); playRafId = null; }
+      isPlaying = false;
+      scrubPlay.textContent = '▶';
+    }
+
+    function startPlay() {
+      isPlaying = true;
+      scrubPlay.textContent = '⏸';
+      const startMs = Number(scrubRange.value);
+      // If at end, restart from beginning
+      const fromMs = startMs >= scrubMaxMs ? 0 : startMs;
+      playStartWall = performance.now();
+      playStartMs   = fromMs;
+
+      function tick(now) {
+        const elapsed = now - playStartWall;
+        const t = playStartMs + elapsed;
+        if (t >= scrubMaxMs) {
+          setScrubT(scrubMaxMs);
+          stopPlay();
+          return;
+        }
+        setScrubT(t);
+        playRafId = requestAnimationFrame(tick);
+      }
+      playRafId = requestAnimationFrame(tick);
+    }
+
+    scrubPlay.addEventListener('click', () => {
+      if (isPlaying) stopPlay();
+      else startPlay();
+    });
+
+    // --------- Download / Clear ----------
+    function downloadJSON() {
+      const meta = {
+        exported_at_iso: new Date().toISOString(),
+        calibrated,
+        calib_clicks_per_point: CALIB_CLICKS_PER_POINT,
+        trial_ms: TRIAL_MS,
+        sample_every_ms: SAMPLE_EVERY_MS,
+        aoi_grid_n: AOI_N,
+        stimulus_rect: getStimulusRect()
+      };
+      const payload = {
+        meta,
+        trial: {
+          participant_id: pidEl.value.trim() || null,
+          condition:      condEl.value.trim() || null,
+          samples:   trialSamples,
+          scanpath:  trialScanpath
+        }
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const pid  = (pidEl.value.trim()  || 'p');
+      const cond = (condEl.value.trim() || 'cond').replace(/\s+/g, '_');
+      a.download = `webgazer_${pid}_${cond}_${Date.now()}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    downloadJsonBtn.addEventListener('click', downloadJSON);
+
+    // --------- Export / Load Session (.wgz) ----------
+    function exportSession() {
+      if (trialSamples.length === 0) {
+        alert('No trial data to export. Run a trial first.');
+        return;
+      }
+      const actualDuration = trialSamples[trialSamples.length - 1].t_ms;
+      const payload = {
+        _type: 'webgazer_session',
+        _version: 1,
+        exported_at_iso: new Date().toISOString(),
+        participant_id: pidEl.value.trim() || null,
+        condition:      condEl.value.trim() || null,
+        trial_ms:       TRIAL_MS,
+        actual_duration_ms: actualDuration,
+        sample_every_ms: SAMPLE_EVERY_MS,
+        aoi_grid_n:     AOI_N,
+        samples:        trialSamples,
+        scanpath:       trialScanpath
+      };
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const pid  = (pidEl.value.trim()  || 'p');
+      const cond = (condEl.value.trim() || 'cond').replace(/\s+/g, '_');
+      a.download = `session_${pid}_${cond}_${Date.now()}.wgz`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function loadSession(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        let data;
+        try {
+          data = JSON.parse(e.target.result);
+        } catch(err) {
+          alert('Could not parse file — make sure it\'s a valid .wgz session file.');
+          return;
+        }
+
+        if (data._type !== 'webgazer_session') {
+          alert('This doesn\'t look like a WebGazer session file.');
+          return;
+        }
+
+        if (isRecording) return;
+
+        // Restore state
+        trialSamples  = data.samples  || [];
+        trialScanpath = data.scanpath || [];
+
+        if (data.participant_id) pidEl.value  = data.participant_id;
+        if (data.condition)      condEl.value = data.condition;
+
+        sampleCountEl.textContent = String(trialSamples.length);
+
+        // Show scrubber at full duration
+        const dur = data.actual_duration_ms || (trialSamples.length > 0 ? trialSamples[trialSamples.length-1].t_ms : TRIAL_MS);
+        showScrubber(dur);
+
+        // Switch to scanpath view by default so something visible immediately
+        if (viewModeEl.value === 'none') viewModeEl.value = 'scanpath';
+        redrawOverlay(dur);
+
+        statusText.textContent = 'Session loaded';
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById('exportSession').addEventListener('click', exportSession);
+
+    const sessionFileInput = document.getElementById('sessionFileInput');
+    document.getElementById('loadSession').addEventListener('click', () => sessionFileInput.click());
+    sessionFileInput.addEventListener('change', () => {
+      const file = sessionFileInput.files[0];
+      if (file) { loadSession(file); sessionFileInput.value = ''; }
+    });
+
+    function exportPNG() {
+      const mode = viewModeEl.value;
+      if (mode === 'none') {
+        alert('Select a view mode first (AOI Grid, Scanpath, or Raw Trail), then export.');
+        return;
+      }
+
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      const offscreen = document.createElement('canvas');
+      offscreen.width  = W;
+      offscreen.height = H;
+      const offCtx = offscreen.getContext('2d');
+
+      const doExport = () => {
+        // Step 2: Copy the overlay canvas on top
+        offCtx.drawImage(overlay, 0, 0);
+
+        // Step 3: Label
+        const modeLabel = { aoi: 'AOI Heatmap', kde: 'KDE Density', scanpath: 'Scanpath', raw: 'Raw Trail' }[mode] || mode;
+        const pid  = pidEl.value.trim()  || 'p';
+        const cond = condEl.value.trim() || 'cond';
+        const label = `${modeLabel} · ${pid} · ${cond}`;
+        offCtx.save();
+        offCtx.font = 'bold 13px system-ui';
+        const tw = offCtx.measureText(label).width;
+        offCtx.fillStyle = 'rgba(0,0,0,0.5)';
+        offCtx.fillRect(W - tw - 24, H - 32, tw + 16, 24);
+        offCtx.fillStyle = 'rgba(255,255,255,0.9)';
+        offCtx.textAlign = 'right';
+        offCtx.textBaseline = 'middle';
+        offCtx.fillText(label, W - 12, H - 20);
+        offCtx.restore();
+
+        offscreen.toBlob(blob => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          const pid2  = pidEl.value.trim()  || 'p';
+          const cond2 = condEl.value.trim() || 'cond';
+          a.download = `webgazer_${pid2}_${cond2}_${mode}_${Date.now()}.png`;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }, 'image/png');
+      };
+
+      // Step 1: Draw background — uploaded image or gradient
+      if (stimulusObjectURL) {
+        const img = new Image();
+        img.onload = () => {
+          offCtx.drawImage(img, 0, 0, W, H);
+          doExport();
+        };
+        img.src = stimulusObjectURL;
+      } else {
+        const grad = offCtx.createLinearGradient(0, 0, W, 0);
+        grad.addColorStop(0,    '#0b0b1a');
+        grad.addColorStop(0.25, '#1d3b7a');
+        grad.addColorStop(0.5,  '#2bb3a3');
+        grad.addColorStop(0.75, '#f4d35e');
+        grad.addColorStop(1,    '#f95738');
+        offCtx.fillStyle = grad;
+        offCtx.fillRect(0, 0, W, H);
+        doExport();
+      }
+    }
+
+    document.getElementById('exportPng').addEventListener('click', exportPNG);
+
+    clearDataBtn.addEventListener('click', () => {
+      if (isRecording) return;
+      if (document.body.classList.contains('calibrating')) return;
+      trialSamples = []; trialScanpath = [];
+      sampleCountEl.textContent = '0';
+      hideScrubber();
+      redrawOverlay();
+    });
+
+    startBtn.addEventListener('click', () => {
+      if (!calibrated) beginCalibration();
+      else startTrial();
+    });
+
+    recalibrateBtn.addEventListener('click', () => {
+      if (isRecording) return;
+      resetCalibration();
+      setTimeout(beginCalibration, 100);
+    });
+
+    stopNowBtn.addEventListener('click', () => {
+      if (isRecording) stopTrial();
+      else hardStopWebgazer();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && isRecording) stopTrial();
+    });
+
+    // --------- Stimulus image upload ----------
+    const stimulusEl         = document.getElementById('stimulus');
+    const uploadStimulusBtn  = document.getElementById('uploadStimulusBtn');
+    const stimulusFileInput  = document.getElementById('stimulusFileInput');
+    const stimulusNote       = document.getElementById('stimulusNote');
+    const resetStimulusEl    = document.getElementById('resetStimulus');
+
+    const DEFAULT_STIMULUS_BG = 'linear-gradient(90deg, #0b0b1a 0%, #1d3b7a 25%, #2bb3a3 50%, #f4d35e 75%, #f95738 100%)';
+    let stimulusObjectURL = null;
+
+    uploadStimulusBtn.addEventListener('click', () => stimulusFileInput.click());
+
+    stimulusFileInput.addEventListener('change', () => {
+      const file = stimulusFileInput.files[0];
+      if (!file) return;
+      if (stimulusObjectURL) URL.revokeObjectURL(stimulusObjectURL);
+      stimulusObjectURL = URL.createObjectURL(file);
+      stimulusEl.style.background = `url(${stimulusObjectURL}) center/cover no-repeat`;
+      stimulusNote.style.display = 'block';
+      stimulusFileInput.value = '';
+    });
+
+    resetStimulusEl.addEventListener('click', () => {
+      if (stimulusObjectURL) { URL.revokeObjectURL(stimulusObjectURL); stimulusObjectURL = null; }
+      stimulusEl.style.background = DEFAULT_STIMULUS_BG;
+      stimulusNote.style.display = 'none';
+    });
+
+    // Init
+    calibTextEl.textContent = 'not done';
+    statusText.textContent  = 'Idle';
+    startBtn.textContent    = 'Calibrate';
+    startBtn.disabled       = false;
+    redrawOverlay();
+  </script>
+
+</body></html>
