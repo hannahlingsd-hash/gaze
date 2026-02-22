@@ -9,7 +9,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --cream: #f7f4ee;
+    --cream: #f5f0e8;
     --ink: #1a1814;
     --ink-light: rgba(26,24,20,0.35);
     --ink-faint: rgba(26,24,20,0.12);
@@ -99,28 +99,129 @@
     display: none;
   }
 
-  /* ---- Top bar ---- */
+  /* ---- Hover panel top-left ---- */
+  #hoverPanel {
+    position: fixed;
+    top: 16px; left: 16px;
+    z-index: 50;
+    display: none; /* shown after file load */
+  }
+
+  #panelTrigger {
+    width: 32px; height: 32px;
+    background: rgba(26,24,20,0.08);
+    border: 1px solid rgba(26,24,20,0.15);
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: default;
+    font-size: 14px;
+    transition: background 150ms;
+    backdrop-filter: blur(4px);
+  }
+
+  #hoverPanel:hover #panelTrigger {
+    background: rgba(26,24,20,0.12);
+  }
+
+  #panelContent {
+    position: absolute;
+    top: 0; left: 0;
+    min-width: 200px;
+    background: rgba(245,240,232,0.95);
+    border: 1px solid rgba(26,24,20,0.12);
+    border-radius: 3px;
+    padding: 14px 16px;
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 180ms ease, transform 180ms ease;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+
+  #hoverPanel:hover #panelContent {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateY(0);
+  }
+
+  /* Dark mode panel bg */
+  body.dark #panelContent {
+    background: rgba(18,18,22,0.95);
+    border-color: rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.75);
+  }
+
+  .panel-label {
+    text-transform: uppercase;
+    opacity: 0.4;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+    margin-top: 14px;
+  }
+  .panel-label:first-child { margin-top: 0; }
+
+  .panel-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .panel-btn {
+    flex: 1;
+    background: none;
+    border: 1px solid rgba(26,24,20,0.15);
+    color: inherit;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms;
+    text-align: center;
+  }
+  .panel-btn:hover { border-color: var(--accent); background: rgba(200,96,42,0.08); }
+  .panel-btn.active {
+    background: rgba(26,24,20,0.08);
+    border-color: rgba(26,24,20,0.35);
+  }
+  body.dark .panel-btn { border-color: rgba(255,255,255,0.15); }
+  body.dark .panel-btn.active { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.4); }
+  body.dark .panel-btn:hover { background: rgba(200,96,42,0.15); border-color: var(--accent); }
+
+  .panel-divider {
+    height: 1px;
+    background: rgba(26,24,20,0.08);
+    margin: 12px 0;
+  }
+  body.dark .panel-divider { background: rgba(255,255,255,0.08); }
+
+  /* ---- Top bar (meta + export, always visible thin strip) ---- */
   #topbar {
     position: fixed;
     top: 0; left: 0; right: 0;
     height: 44px;
     display: none;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding: 0 20px;
-    border-bottom: 1px solid var(--ink-faint);
-    background: rgba(247,244,238,0.85);
-    backdrop-filter: blur(8px);
-    z-index: 50;
+    z-index: 45;
     font-size: 11px;
     letter-spacing: 0.07em;
     text-transform: uppercase;
+    pointer-events: none;
   }
-  #topbar .meta { opacity: 0.45; }
-  #topbar .controls { display: flex; gap: 12px; align-items: center; }
+  #topbar .controls {
+    display: flex; gap: 10px; align-items: center;
+    pointer-events: all;
+  }
   #topbar button {
-    background: none;
-    border: 1px solid var(--ink-faint);
+    background: rgba(245,240,232,0.85);
+    border: 1px solid rgba(26,24,20,0.12);
     color: var(--ink);
     font-family: 'DM Mono', monospace;
     font-size: 10px;
@@ -129,9 +230,26 @@
     padding: 5px 12px;
     border-radius: 2px;
     cursor: pointer;
+    backdrop-filter: blur(8px);
     transition: border-color 150ms, background 150ms;
   }
-  #topbar button:hover { border-color: var(--accent); background: rgba(200,96,42,0.06); }
+  #topbar button:hover { border-color: var(--accent); }
+  body.dark #topbar button {
+    background: rgba(18,18,22,0.85);
+    border-color: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.75);
+  }
+
+  /* ---- Dark mode global ---- */
+  body.dark {
+    background: #0e0e10;
+  }
+  body.dark #loading { background: #0e0e10; color: rgba(255,255,255,0.4); }
+  body.dark #panelTrigger {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.5);
+  }
 
   /* ---- Scrubber ---- */
   #scrubber {
@@ -143,9 +261,14 @@
     gap: 14px;
     padding: 0 24px;
     border-top: 1px solid var(--ink-faint);
-    background: rgba(247,244,238,0.88);
+    background: rgba(245,240,232,0.88);
     backdrop-filter: blur(8px);
     z-index: 50;
+    transition: background 300ms, border-color 300ms;
+  }
+  body.dark #scrubber {
+    background: rgba(14,14,16,0.90);
+    border-top-color: rgba(255,255,255,0.08);
   }
   #scrubTime {
     font-size: 11px;
@@ -238,11 +361,31 @@
 <!-- Main canvas -->
 <canvas id="canvas"></canvas>
 
-<!-- Top bar -->
+<!-- Hover panel top-left -->
+<div id="hoverPanel">
+  <div id="panelTrigger">⊹</div>
+  <div id="panelContent">
+    <div class="panel-label">Background</div>
+    <div class="panel-row">
+      <button class="panel-btn active" id="btnBeige">Beige</button>
+      <button class="panel-btn" id="btnDark">Dark</button>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="panel-label">Layers</div>
+    <div class="panel-row">
+      <button class="panel-btn active" id="btnLabels">Labels</button>
+      <button class="panel-btn active" id="btnScanpath">Scanpath</button>
+    </div>
+    <div class="panel-divider"></div>
+    <div class="panel-row">
+      <button class="panel-btn" id="resetBtn">← Load new</button>
+    </div>
+  </div>
+</div>
+
+<!-- Top bar (export only) -->
 <div id="topbar">
-  <div class="meta" id="metaText">—</div>
   <div class="controls">
-    <button id="resetBtn">← Load new</button>
     <button id="exportBtn">↓ Export PNG</button>
   </div>
 </div>
@@ -259,12 +402,15 @@
 // ─────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────
-const KDE_GRID       = 160;   // density grid resolution
-const N_CONTOURS     = 20;    // iso-contour levels
-const MIN_LEVEL      = 0.05;  // lowest iso-level drawn
-const BANDWIDTH_FRAC = 0.055; // KDE gaussian bandwidth fraction of min(W,H)
-const CHAIKIN_PASSES = 3;     // smoothing passes
-const MIN_PTS        = 3;     // min points to draw a chain
+const KDE_GRID         = 200;   // higher res = sharper contours
+const N_CONTOURS       = 28;    // tight local rings
+const MIN_LEVEL        = 0.03;
+const BANDWIDTH_FRAC   = 0.02;  // tight — for node rings
+const BANDWIDTH_GLOBAL = 0.065; // wide — for landscape contours
+const N_CONTOURS_GLOBAL = 10;
+const MIN_LEVEL_GLOBAL  = 0.06;
+const CHAIKIN_PASSES   = 3;
+const MIN_PTS          = 3;
 
 const GRAD_STOPS = [
   { t: 0.00, r: 11,  g: 11,  b: 26  },
@@ -284,7 +430,7 @@ const loading    = document.getElementById('loading');
 const canvas     = document.getElementById('canvas');
 const ctx        = canvas.getContext('2d');
 const topbar     = document.getElementById('topbar');
-const metaText   = document.getElementById('metaText');
+const hoverPanel = document.getElementById('hoverPanel');
 const scrubber   = document.getElementById('scrubber');
 const scrubRange = document.getElementById('scrubRange');
 const scrubTime  = document.getElementById('scrubTime');
@@ -292,13 +438,20 @@ const scrubDur   = document.getElementById('scrubDur');
 const scrubPlay  = document.getElementById('scrubPlay');
 const resetBtn   = document.getElementById('resetBtn');
 const exportBtn  = document.getElementById('exportBtn');
+const btnBeige   = document.getElementById('btnBeige');
+const btnDark    = document.getElementById('btnDark');
+const btnLabels  = document.getElementById('btnLabels');
+const btnScanpath = document.getElementById('btnScanpath');
 
-let session      = null;
-let scrubMaxMs   = 30000;
-let isPlaying    = false;
-let playRafId    = null;
+let session       = null;
+let scrubMaxMs    = 30000;
+let isPlaying     = false;
+let playRafId     = null;
 let playStartWall = 0;
-let playStartMs  = 0;
+let playStartMs   = 0;
+let darkMode      = false;
+let showLabels    = true;
+let showScanpath  = true;
 
 // ─────────────────────────────────────────────
 // FILE LOADING
@@ -336,15 +489,15 @@ function loadFile(file) {
     scrubDur.textContent  = fmt(scrubMaxMs);
     scrubTime.textContent = fmt(scrubMaxMs);
     const n = session.samples.filter(s => s.valid).length;
-    metaText.textContent = `${session.participant_id||'—'} · ${session.condition||'—'} · ${n} valid samples`;
     dropzone.classList.add('hidden');
     resizeCanvas();
     setTimeout(() => {
       render(scrubMaxMs);
-      canvas.style.display   = 'block';
-      topbar.style.display   = 'flex';
-      scrubber.style.display = 'flex';
-      loading.style.display  = 'none';
+      canvas.style.display    = 'block';
+      topbar.style.display    = 'flex';
+      hoverPanel.style.display = 'block';
+      scrubber.style.display  = 'flex';
+      loading.style.display   = 'none';
     }, 60);
   };
   reader.readAsText(file);
@@ -365,10 +518,14 @@ function buildScanpath(samples) {
 // CANVAS RESIZE
 // ─────────────────────────────────────────────
 function resizeCanvas() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  canvas.style.width  = canvas.width  + 'px';
-  canvas.style.height = canvas.height + 'px';
+  const dpr = window.devicePixelRatio || 1;
+  const W   = window.innerWidth;
+  const H   = window.innerHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 window.addEventListener('resize', () => { resizeCanvas(); if (session) render(Number(scrubRange.value)); });
 
@@ -390,9 +547,11 @@ function sampleGradient(t) {
 // ─────────────────────────────────────────────
 // KDE FIELD
 // ─────────────────────────────────────────────
-function buildKDEField(samples, maxT) {
-  const W = canvas.width, H = canvas.height;
-  const bw  = Math.min(W, H) * BANDWIDTH_FRAC;
+function buildKDEField(samples, maxT, bwFrac) {
+  bwFrac = bwFrac || BANDWIDTH_FRAC;
+  const W = parseInt(canvas.style.width)  || canvas.width;
+  const H = parseInt(canvas.style.height) || canvas.height;
+  const bw  = Math.min(W, H) * bwFrac;
   const bw2 = bw * bw;
   const field = new Float32Array(KDE_GRID * KDE_GRID);
 
@@ -522,10 +681,40 @@ function nearestFix(gx, gy, fixList) {
 // MAIN RENDER
 // ─────────────────────────────────────────────
 function render(maxT) {
-  const W = canvas.width, H = canvas.height;
+  const W = parseInt(canvas.style.width)  || canvas.width;
+  const H = parseInt(canvas.style.height) || canvas.height;
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
+
+  // Background — paper or dark
+  if (darkMode) {
+    ctx.fillStyle = '#0e0e10';
+    ctx.fillRect(0, 0, W, H);
+    // subtle dark grain
+    const grain = ctx.createImageData(W, H);
+    const gd = grain.data;
+    for (let i = 0; i < gd.length; i += 4) {
+      const v = Math.random() * 10 - 5;
+      gd[i]   = Math.max(0, Math.min(255, 14 + v));
+      gd[i+1] = Math.max(0, Math.min(255, 14 + v));
+      gd[i+2] = Math.max(0, Math.min(255, 16 + v));
+      gd[i+3] = 255;
+    }
+    ctx.putImageData(grain, 0, 0);
+  } else {
+    ctx.fillStyle = '#f5f0e8';
+    ctx.fillRect(0, 0, W, H);
+    // paper grain
+    const grain = ctx.createImageData(W, H);
+    const gd = grain.data;
+    for (let i = 0; i < gd.length; i += 4) {
+      const v = Math.random() * 18 - 9;
+      gd[i]   = Math.max(0, Math.min(255, 245 + v));
+      gd[i+1] = Math.max(0, Math.min(255, 240 + v));
+      gd[i+2] = Math.max(0, Math.min(255, 232 + v));
+      gd[i+3] = 255;
+    }
+    ctx.putImageData(grain, 0, 0);
+  }
 
   if (!session || !session.samples) return;
 
@@ -538,70 +727,100 @@ function render(maxT) {
     return;
   }
 
-  const field    = buildKDEField(session.samples, maxT);
-  const scanPts  = session.scanpath.filter(p => p.t_ms <= maxT);
-  const fixList  = buildFixLookup(scanPts, W, H);
-  const dwells   = scanPts.map((p, i) => {
+  // Two fields — tight for node rings, wide for landscape
+  const fieldTight  = buildKDEField(session.samples, maxT, BANDWIDTH_FRAC);
+  const fieldGlobal = buildKDEField(session.samples, maxT, BANDWIDTH_GLOBAL);
+
+  const scanPts = session.scanpath.filter(p => p.t_ms <= maxT);
+  const fixList = buildFixLookup(scanPts, W, H);
+  const dwells  = scanPts.map((p, i) => {
     const nextT = i < scanPts.length-1 ? scanPts[i+1].t_ms : maxT;
     return (nextT - p.t_ms) / 1000;
   });
 
-  // Proximity falloff distance in grid cells
-  // Chains whose centroid is within this of a fixation draw at full intensity
-  // Beyond it they fade but never disappear (min 0.15 proximity)
-  const falloffSq = (KDE_GRID * 0.28) ** 2;
-
-  const levels = [];
-  for (let i = 0; i < N_CONTOURS; i++) {
-    levels.push(MIN_LEVEL + (1 - MIN_LEVEL) * (i / (N_CONTOURS - 1)));
-  }
-
-  ctx.save();
-  ctx.lineJoin = 'round';
-  ctx.lineCap  = 'round';
-
-  for (let li = 0; li < levels.length; li++) {
-    const level   = levels[li];
-    const tl      = (level - MIN_LEVEL) / (1 - MIN_LEVEL); // 0=outer, 1=inner
-
-    const chains  = marchingSquares(field, level);
-
-    for (const chain of chains) {
-      if (chain.length < MIN_PTS) continue;
-      const sm = chaikin(chain, CHAIKIN_PASSES);
-      if (sm.length < 2) continue;
-
-      // Centroid in grid space → nearest fixation → color + proximity
-      let sx = 0, sy = 0;
-      for (const p of sm) { sx += p.x; sy += p.y; }
-      const cgx = sx / sm.length, cgy = sy / sm.length;
-
-      const { gradT, distSq } = nearestFix(cgx, cgy, fixList);
-      const col = sampleGradient(gradT);
-
-      // proximity: 1 right at peak, min 0.15 far away — never zero
-      const proximity = Math.max(0.15, 1 - distSq / falloffSq);
-
-      const alpha = (0.28 + tl * 0.62) * proximity;
-      const lw    = (0.5  + tl * 2.2)  * (0.35 + proximity * 0.65);
-
-      ctx.beginPath();
-      ctx.moveTo((sm[0].x / KDE_GRID) * W, (sm[0].y / KDE_GRID) * H);
-      for (let i = 1; i < sm.length; i++) {
-        ctx.lineTo((sm[i].x / KDE_GRID) * W, (sm[i].y / KDE_GRID) * H);
-      }
-      const isLoop = (sm[0].x-sm[sm.length-1].x)**2+(sm[0].y-sm[sm.length-1].y)**2 < 0.25;
-      if (isLoop) ctx.closePath();
-
-      ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${alpha.toFixed(3)})`;
-      ctx.lineWidth   = lw;
-      ctx.stroke();
+  // Helper — draw a set of contour levels from a field
+  function drawContours(field, nLevels, minLevel, falloffSq, alphaRange, lwRange) {
+    const levels = [];
+    for (let i = 0; i < nLevels; i++) {
+      levels.push(minLevel + (1 - minLevel) * (i / (nLevels - 1)));
     }
-  }
-  ctx.restore();
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap  = 'round';
 
-  // Scanpath line
-  if (scanPts.length >= 2) {
+    for (let li = 0; li < levels.length; li++) {
+      const level = levels[li];
+      const tl    = (level - minLevel) / (1 - minLevel);
+      const chains = marchingSquares(field, level);
+
+      for (const chain of chains) {
+        if (chain.length < MIN_PTS) continue;
+        const sm = chaikin(chain, CHAIKIN_PASSES);
+        if (sm.length < 2) continue;
+
+        // Discard chains that are far too elongated — these are open arcs
+        // running off-screen edges that look like vertical/horizontal lines
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const p of sm) {
+          if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+        }
+        const bboxW = maxX - minX, bboxH = maxY - minY;
+        const aspect = Math.max(bboxW, bboxH) / (Math.min(bboxW, bboxH) + 0.001);
+        // Skip if aspect ratio > 8 AND the chain is not closed (open arc)
+        const isLoop = (sm[0].x-sm[sm.length-1].x)**2+(sm[0].y-sm[sm.length-1].y)**2 < 0.25;
+        if (!isLoop && aspect > 8) continue;
+
+        let sx = 0, sy = 0;
+        for (const p of sm) { sx += p.x; sy += p.y; }
+        const cgx = sx / sm.length, cgy = sy / sm.length;
+
+        const { gradT, distSq } = nearestFix(cgx, cgy, fixList);
+        const col = sampleGradient(gradT);
+        const proximity = Math.max(0.15, 1 - distSq / falloffSq);
+
+        const alpha = (alphaRange[0] + tl * alphaRange[1]) * proximity;
+        const lw    = (lwRange[0]    + tl * lwRange[1])    * (0.4 + proximity * 0.6);
+
+        ctx.beginPath();
+        ctx.moveTo((sm[0].x / KDE_GRID) * W, (sm[0].y / KDE_GRID) * H);
+        for (let i = 1; i < sm.length; i++) {
+          ctx.lineTo((sm[i].x / KDE_GRID) * W, (sm[i].y / KDE_GRID) * H);
+        }
+        if (isLoop) ctx.closePath();
+
+        ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${alpha.toFixed(3)})`;
+        ctx.lineWidth   = lw;
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  const dm = darkMode ? 1.6 : 1.0; // boost visibility on dark bg
+
+  // 1. Global landscape — wide, fewer levels, faint, drawn first (underneath)
+  drawContours(
+    fieldGlobal,
+    N_CONTOURS_GLOBAL,
+    MIN_LEVEL_GLOBAL,
+    (KDE_GRID * 0.35) ** 2,
+    [0.10 * dm, 0.30 * dm],
+    [0.4,  0.8]
+  );
+
+  // 2. Tight node rings — sharp, many levels, vivid, drawn on top
+  drawContours(
+    fieldTight,
+    N_CONTOURS,
+    MIN_LEVEL,
+    (KDE_GRID * 0.10) ** 2,
+    [0.30 * dm, 0.60 * dm],
+    [0.6,  1.6]
+  );
+
+  // Scanpath line (toggleable layer)
+  if (showScanpath && scanPts.length >= 2) {
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(scanPts[0].x_px, scanPts[0].y_px);
@@ -614,9 +833,12 @@ function render(maxT) {
     ctx.restore();
   }
 
-  // Fixation dots + labels
+  // Fixation dots + labels (togglable layer)
+  if (showLabels) {
   ctx.save();
   ctx.font = '300 10px "DM Mono", monospace';
+  const labelCol = darkMode ? 'rgba(255,255,255,0.85)' : 'rgba(26,24,20,0.5)';
+  const pillBg   = darkMode ? 'rgba(14,14,16,0.82)' : 'rgba(255,255,255,0.88)';
 
   for (let i = 0; i < scanPts.length; i++) {
     const p      = scanPts[i];
@@ -624,7 +846,7 @@ function render(maxT) {
     const gx     = Math.round((p.x_px / W) * (KDE_GRID - 1));
     const gy     = Math.round((p.y_px / H) * (KDE_GRID - 1));
     const idx    = Math.max(0, Math.min(KDE_GRID*KDE_GRID-1, gy*KDE_GRID+gx));
-    const density = field[idx] || 0;
+    const density = fieldTight[idx] || 0;
     const col    = sampleGradient(p.x_px / W);
     const radius = 3 + density * 9;
 
@@ -634,25 +856,26 @@ function render(maxT) {
     ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.95)`;
     ctx.fill();
 
-    // White pin
+    // White/dark pin
     ctx.beginPath();
     ctx.arc(p.x_px, p.y_px, radius * 0.38, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillStyle = darkMode ? 'rgba(14,14,16,0.9)' : 'rgba(255,255,255,0.9)';
     ctx.fill();
 
     // Label
     const lx = p.x_px + radius + 8, ly = p.y_px;
     const l1 = `#${i+1}`, l2 = `${dwell.toFixed(1)}s`;
     const pw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 10;
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillStyle = pillBg;
     ctx.fillRect(lx - 3, ly - 14, pw, 26);
     ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},1.0)`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(l1, lx, ly - 5);
-    ctx.fillStyle = 'rgba(26,24,20,0.5)';
+    ctx.fillStyle = labelCol;
     ctx.fillText(l2, lx, ly + 7);
   }
   ctx.restore();
+  }
 
   // Stamp
   ctx.save();
@@ -696,11 +919,43 @@ function startPlay() {
 scrubPlay.addEventListener('click', () => { if (isPlaying) stopPlay(); else startPlay(); });
 
 // ─────────────────────────────────────────────
+// PANEL CONTROLS
+// ─────────────────────────────────────────────
+btnBeige.addEventListener('click', () => {
+  darkMode = false;
+  document.body.classList.remove('dark');
+  btnBeige.classList.add('active');
+  btnDark.classList.remove('active');
+  if (session) render(Number(scrubRange.value));
+});
+
+btnDark.addEventListener('click', () => {
+  darkMode = true;
+  document.body.classList.add('dark');
+  btnDark.classList.add('active');
+  btnBeige.classList.remove('active');
+  if (session) render(Number(scrubRange.value));
+});
+
+btnLabels.addEventListener('click', () => {
+  showLabels = !showLabels;
+  btnLabels.classList.toggle('active', showLabels);
+  if (session) render(Number(scrubRange.value));
+});
+
+btnScanpath.addEventListener('click', () => {
+  showScanpath = !showScanpath;
+  btnScanpath.classList.toggle('active', showScanpath);
+  if (session) render(Number(scrubRange.value));
+});
+
+// ─────────────────────────────────────────────
 // RESET + EXPORT
 // ─────────────────────────────────────────────
 resetBtn.addEventListener('click', () => {
   stopPlay(); session = null;
-  canvas.style.display='none'; topbar.style.display='none'; scrubber.style.display='none';
+  canvas.style.display='none'; topbar.style.display='none';
+  hoverPanel.style.display='none'; scrubber.style.display='none';
   dropzone.classList.remove('hidden');
 });
 
