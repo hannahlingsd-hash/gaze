@@ -24,16 +24,11 @@
     overflow: hidden;
   }
 
-  /* ---- Drop zone ---- */
   #dropzone {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    z-index: 100;
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px; z-index: 100;
     background: var(--cream);
     transition: opacity 400ms ease;
   }
@@ -42,111 +37,54 @@
   #dropzone .title {
     font-family: 'Cormorant Garamond', serif;
     font-size: clamp(28px, 5vw, 52px);
-    font-weight: 300;
-    letter-spacing: 0.04em;
-    color: var(--ink);
-    text-align: center;
-    line-height: 1.1;
+    font-weight: 300; letter-spacing: 0.04em;
+    color: var(--ink); text-align: center; line-height: 1.1;
   }
-  #dropzone .title em {
-    font-style: italic;
-    color: var(--accent);
-  }
+  #dropzone .title em { font-style: italic; color: var(--accent); }
 
   #dropBox {
-    width: min(420px, 88vw);
-    height: 180px;
-    border: 1.5px dashed var(--ink-light);
-    border-radius: 4px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
+    width: min(420px, 88vw); height: 180px;
+    border: 1.5px dashed var(--ink-light); border-radius: 4px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
     cursor: pointer;
     transition: border-color 200ms, background 200ms;
   }
-  #dropBox:hover, #dropBox.over {
-    border-color: var(--accent);
-    background: rgba(200,96,42,0.04);
-  }
-  #dropBox .icon {
-    font-size: 28px;
-    opacity: 0.4;
-  }
+  #dropBox:hover, #dropBox.over { border-color: var(--accent); background: rgba(200,96,42,0.04); }
+  #dropBox .icon { font-size: 28px; opacity: 0.4; }
   #dropBox p {
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    opacity: 0.5;
-    text-align: center;
-    line-height: 1.6;
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    opacity: 0.5; text-align: center; line-height: 1.6;
   }
   #dropBox p strong { color: var(--accent); opacity: 1; font-weight: 400; }
   #fileInput { display: none; }
+  #dropzone .sub { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.3; }
 
-  #dropzone .sub {
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    opacity: 0.3;
-  }
+  #canvas { position: fixed; inset: 0; display: none; }
 
-  /* ---- Canvas ---- */
-  #canvas {
-    position: fixed;
-    inset: 0;
-    display: none;
-  }
-
-  /* ---- Hover panel top-left ---- */
-  #hoverPanel {
-    position: fixed;
-    top: 16px; left: 16px;
-    z-index: 50;
-    display: none; /* shown after file load */
-  }
+  #hoverPanel { position: fixed; top: 16px; left: 16px; z-index: 50; display: none; }
 
   #panelTrigger {
     width: 32px; height: 32px;
     background: rgba(26,24,20,0.08);
-    border: 1px solid rgba(26,24,20,0.15);
-    border-radius: 3px;
+    border: 1px solid rgba(26,24,20,0.15); border-radius: 3px;
     display: flex; align-items: center; justify-content: center;
-    cursor: default;
-    font-size: 14px;
-    transition: background 150ms;
-    backdrop-filter: blur(4px);
+    cursor: default; font-size: 14px;
+    transition: background 150ms; backdrop-filter: blur(4px);
   }
-
-  #hoverPanel:hover #panelTrigger {
-    background: rgba(26,24,20,0.12);
-  }
+  #hoverPanel:hover #panelTrigger { background: rgba(26,24,20,0.12); }
 
   #panelContent {
-    position: absolute;
-    top: 0; left: 0;
-    min-width: 200px;
+    position: absolute; top: 0; left: 0; min-width: 200px;
     background: rgba(245,240,232,0.95);
-    border: 1px solid rgba(26,24,20,0.12);
-    border-radius: 3px;
-    padding: 14px 16px;
-    backdrop-filter: blur(12px);
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-4px);
+    border: 1px solid rgba(26,24,20,0.12); border-radius: 3px;
+    padding: 14px 16px; backdrop-filter: blur(12px);
+    opacity: 0; pointer-events: none; transform: translateY(-4px);
     transition: opacity 180ms ease, transform 180ms ease;
-    font-size: 11px;
-    letter-spacing: 0.06em;
+    font-size: 11px; letter-spacing: 0.06em;
   }
+  #hoverPanel:hover #panelContent { opacity: 1; pointer-events: all; transform: translateY(0); }
 
-  #hoverPanel:hover #panelContent {
-    opacity: 1;
-    pointer-events: all;
-    transform: translateY(0);
-  }
-
-  /* Dark mode panel bg */
   body.dark #panelContent {
     background: rgba(18,18,22,0.95);
     border-color: rgba(255,255,255,0.10);
@@ -154,215 +92,103 @@
   }
 
   .panel-label {
-    text-transform: uppercase;
-    opacity: 0.4;
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    margin-bottom: 8px;
-    margin-top: 14px;
+    text-transform: uppercase; opacity: 0.4; font-size: 9px;
+    letter-spacing: 0.1em; margin-bottom: 8px; margin-top: 14px;
   }
   .panel-label:first-child { margin-top: 0; }
-
-  .panel-row {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 4px;
-  }
+  .panel-row { display: flex; gap: 6px; margin-bottom: 4px; }
 
   .panel-btn {
-    flex: 1;
-    background: none;
-    border: 1px solid rgba(26,24,20,0.15);
-    color: inherit;
-    font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 5px 8px;
-    border-radius: 2px;
-    cursor: pointer;
-    transition: background 120ms, border-color 120ms;
-    text-align: center;
+    flex: 1; background: none;
+    border: 1px solid rgba(26,24,20,0.15); color: inherit;
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 5px 8px; border-radius: 2px; cursor: pointer;
+    transition: background 120ms, border-color 120ms; text-align: center;
   }
   .panel-btn:hover { border-color: var(--accent); background: rgba(200,96,42,0.08); }
-  .panel-btn.active {
-    background: rgba(26,24,20,0.08);
-    border-color: rgba(26,24,20,0.35);
-  }
+  .panel-btn.active { background: rgba(26,24,20,0.08); border-color: rgba(26,24,20,0.35); }
   body.dark .panel-btn { border-color: rgba(255,255,255,0.15); }
   body.dark .panel-btn.active { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.4); }
   body.dark .panel-btn:hover { background: rgba(200,96,42,0.15); border-color: var(--accent); }
 
-  .panel-divider {
-    height: 1px;
-    background: rgba(26,24,20,0.08);
-    margin: 12px 0;
-  }
+  .panel-divider { height: 1px; background: rgba(26,24,20,0.08); margin: 12px 0; }
   body.dark .panel-divider { background: rgba(255,255,255,0.08); }
 
-  /* ---- Top bar (meta + export, always visible thin strip) ---- */
   #topbar {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    height: 44px;
-    display: none;
-    align-items: center;
-    justify-content: flex-end;
-    padding: 0 20px;
-    z-index: 45;
-    font-size: 11px;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    pointer-events: none;
+    position: fixed; top: 0; left: 0; right: 0; height: 44px;
+    display: none; align-items: center; justify-content: flex-end;
+    padding: 0 20px; z-index: 45; font-size: 11px;
+    letter-spacing: 0.07em; text-transform: uppercase; pointer-events: none;
   }
-  #topbar .controls {
-    display: flex; gap: 10px; align-items: center;
-    pointer-events: all;
-  }
+  #topbar .controls { display: flex; gap: 10px; align-items: center; pointer-events: all; }
   #topbar button {
-    background: rgba(245,240,232,0.85);
-    border: 1px solid rgba(26,24,20,0.12);
-    color: var(--ink);
-    font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    padding: 5px 12px;
-    border-radius: 2px;
-    cursor: pointer;
-    backdrop-filter: blur(8px);
+    background: rgba(245,240,232,0.85); border: 1px solid rgba(26,24,20,0.12);
+    color: var(--ink); font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 0.07em; text-transform: uppercase; padding: 5px 12px;
+    border-radius: 2px; cursor: pointer; backdrop-filter: blur(8px);
     transition: border-color 150ms, background 150ms;
   }
   #topbar button:hover { border-color: var(--accent); }
   body.dark #topbar button {
-    background: rgba(18,18,22,0.85);
-    border-color: rgba(255,255,255,0.12);
+    background: rgba(18,18,22,0.85); border-color: rgba(255,255,255,0.12);
     color: rgba(255,255,255,0.75);
   }
 
-  /* ---- Dark mode global ---- */
-  body.dark {
-    background: #0e0e10;
-  }
+  body.dark { background: #0e0e10; }
   body.dark #loading { background: #0e0e10; color: rgba(255,255,255,0.4); }
   body.dark #panelTrigger {
-    background: rgba(255,255,255,0.06);
-    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12);
     color: rgba(255,255,255,0.5);
   }
 
-  /* ---- Scrubber ---- */
   #scrubber {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: 48px;
-    display: none;
-    align-items: center;
-    gap: 14px;
-    padding: 0 24px;
+    position: fixed; bottom: 0; left: 0; right: 0; height: 48px;
+    display: none; align-items: center; gap: 14px; padding: 0 24px;
     border-top: 1px solid var(--ink-faint);
-    background: rgba(245,240,232,0.88);
-    backdrop-filter: blur(8px);
-    z-index: 50;
-    transition: background 300ms, border-color 300ms;
+    background: rgba(245,240,232,0.88); backdrop-filter: blur(8px);
+    z-index: 50; transition: background 300ms, border-color 300ms;
   }
-  body.dark #scrubber {
-    background: rgba(14,14,16,0.95);
-    border-top-color: rgba(255,255,255,0.10);
-  }
-  body.dark #scrubTime,
-  body.dark #scrubDur {
-    color: rgba(255,255,255,0.6);
-  }
-  body.dark #scrubPlay {
-    border-color: rgba(255,255,255,0.20);
-    color: rgba(255,255,255,0.7);
-  }
+  body.dark #scrubber { background: rgba(14,14,16,0.95); border-top-color: rgba(255,255,255,0.10); }
+  body.dark #scrubTime, body.dark #scrubDur { color: rgba(255,255,255,0.6); }
+  body.dark #scrubPlay { border-color: rgba(255,255,255,0.20); color: rgba(255,255,255,0.7); }
   body.dark #scrubPlay:hover { border-color: var(--accent); }
-  body.dark #scrubRange {
-    background: rgba(255,255,255,0.15);
-  }
-  body.dark #scrubRange::-webkit-slider-thumb {
-    background: rgba(255,255,255,0.8);
-  }
-  body.dark #scrubRange::-moz-range-thumb {
-    background: rgba(255,255,255,0.8);
-  }
-  #scrubTime {
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    opacity: 0.55;
-    min-width: 44px;
-    font-variant-numeric: tabular-nums;
-  }
+  body.dark #scrubRange { background: rgba(255,255,255,0.15); }
+  body.dark #scrubRange::-webkit-slider-thumb { background: rgba(255,255,255,0.8); }
+  body.dark #scrubRange::-moz-range-thumb { background: rgba(255,255,255,0.8); }
+
+  #scrubTime { font-size: 11px; letter-spacing: 0.06em; opacity: 0.55; min-width: 44px; font-variant-numeric: tabular-nums; }
   #scrubPlay {
-    background: none;
-    border: 1px solid var(--ink-faint);
-    color: var(--ink);
-    font-size: 11px;
-    width: 28px; height: 28px;
-    border-radius: 2px;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    background: none; border: 1px solid var(--ink-faint); color: var(--ink);
+    font-size: 11px; width: 28px; height: 28px; border-radius: 2px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     transition: border-color 150ms;
   }
   #scrubPlay:hover { border-color: var(--accent); }
-
   #scrubRange {
-    flex: 1;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 1px;
-    background: var(--ink-faint);
-    outline: none;
-    cursor: pointer;
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 1px; background: var(--ink-faint); outline: none; cursor: pointer;
   }
   #scrubRange::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 11px; height: 11px;
-    border-radius: 50%;
-    background: var(--ink);
-    cursor: pointer;
+    -webkit-appearance: none; width: 11px; height: 11px;
+    border-radius: 50%; background: var(--ink); cursor: pointer;
   }
   #scrubRange::-moz-range-thumb {
-    width: 11px; height: 11px;
-    border-radius: 50%;
-    background: var(--ink);
-    border: none;
-    cursor: pointer;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--ink); border: none; cursor: pointer;
   }
-  #scrubDur {
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    opacity: 0.3;
-    min-width: 36px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
+  #scrubDur { font-size: 11px; letter-spacing: 0.06em; opacity: 0.3; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 
-  /* ---- Export PNG btn ---- */
-  #exportBtn { }
-
-  /* ---- Loading indicator ---- */
   #loading {
-    position: fixed;
-    inset: 0;
-    background: var(--cream);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 200;
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    opacity: 0.5;
+    position: fixed; inset: 0; background: var(--cream);
+    display: none; align-items: center; justify-content: center;
+    z-index: 200; font-size: 12px; letter-spacing: 0.1em;
+    text-transform: uppercase; opacity: 0.5;
   }
 </style>
 </head>
 <body>
 
-<!-- Drop zone -->
 <div id="dropzone">
   <div class="title">Gaze <em>Topography</em></div>
   <div id="dropBox">
@@ -373,13 +199,9 @@
   <input type="file" id="fileInput" accept=".wgz,.json" />
 </div>
 
-<!-- Loading -->
 <div id="loading">Rendering…</div>
-
-<!-- Main canvas -->
 <canvas id="canvas"></canvas>
 
-<!-- Hover panel top-left -->
 <div id="hoverPanel">
   <div id="panelTrigger">⊹</div>
   <div id="panelContent">
@@ -394,6 +216,9 @@
       <button class="panel-btn active" id="btnLabels">Labels</button>
       <button class="panel-btn active" id="btnScanpath">Scanpath</button>
     </div>
+    <div class="panel-row">
+      <button class="panel-btn active" id="btnLegend">Legend</button>
+    </div>
     <div class="panel-divider"></div>
     <div class="panel-row">
       <button class="panel-btn" id="resetBtn">← Load new</button>
@@ -401,14 +226,12 @@
   </div>
 </div>
 
-<!-- Top bar (export only) -->
 <div id="topbar">
   <div class="controls">
     <button id="exportBtn">↓ Export PNG</button>
   </div>
 </div>
 
-<!-- Scrubber -->
 <div id="scrubber">
   <button id="scrubPlay">▶</button>
   <span id="scrubTime">0.0s</span>
@@ -417,18 +240,15 @@
 </div>
 
 <script>
-// ─────────────────────────────────────────────
-// CONSTANTS
-// ─────────────────────────────────────────────
-const KDE_GRID         = 200;
-const N_CONTOURS       = 28;
-const MIN_LEVEL        = 0.03;
-const BANDWIDTH_FRAC   = 0.02;
-const BANDWIDTH_GLOBAL = 0.065;
+const KDE_GRID          = 200;
+const N_CONTOURS        = 28;
+const MIN_LEVEL         = 0.03;
+const BANDWIDTH_FRAC    = 0.02;
+const BANDWIDTH_GLOBAL  = 0.065;
 const N_CONTOURS_GLOBAL = 10;
 const MIN_LEVEL_GLOBAL  = 0.06;
-const CHAIKIN_PASSES   = 3;
-const MIN_PTS          = 3;
+const CHAIKIN_PASSES    = 3;
+const MIN_PTS           = 3;
 
 const GRAD_STOPS = [
   { t: 0.00, r: 11,  g: 11,  b: 26  },
@@ -438,28 +258,26 @@ const GRAD_STOPS = [
   { t: 1.00, r: 249, g: 87,  b: 56  },
 ];
 
-// ─────────────────────────────────────────────
-// DOM
-// ─────────────────────────────────────────────
-const dropzone   = document.getElementById('dropzone');
-const dropBox    = document.getElementById('dropBox');
-const fileInput  = document.getElementById('fileInput');
-const loading    = document.getElementById('loading');
-const canvas     = document.getElementById('canvas');
-const ctx        = canvas.getContext('2d');
-const topbar     = document.getElementById('topbar');
-const hoverPanel = document.getElementById('hoverPanel');
-const scrubber   = document.getElementById('scrubber');
-const scrubRange = document.getElementById('scrubRange');
-const scrubTime  = document.getElementById('scrubTime');
-const scrubDur   = document.getElementById('scrubDur');
-const scrubPlay  = document.getElementById('scrubPlay');
-const resetBtn   = document.getElementById('resetBtn');
-const exportBtn  = document.getElementById('exportBtn');
-const btnBeige   = document.getElementById('btnBeige');
-const btnDark    = document.getElementById('btnDark');
-const btnLabels  = document.getElementById('btnLabels');
+const dropzone    = document.getElementById('dropzone');
+const dropBox     = document.getElementById('dropBox');
+const fileInput   = document.getElementById('fileInput');
+const loading     = document.getElementById('loading');
+const canvas      = document.getElementById('canvas');
+const ctx         = canvas.getContext('2d');
+const topbar      = document.getElementById('topbar');
+const hoverPanel  = document.getElementById('hoverPanel');
+const scrubber    = document.getElementById('scrubber');
+const scrubRange  = document.getElementById('scrubRange');
+const scrubTime   = document.getElementById('scrubTime');
+const scrubDur    = document.getElementById('scrubDur');
+const scrubPlay   = document.getElementById('scrubPlay');
+const resetBtn    = document.getElementById('resetBtn');
+const exportBtn   = document.getElementById('exportBtn');
+const btnBeige    = document.getElementById('btnBeige');
+const btnDark     = document.getElementById('btnDark');
+const btnLabels   = document.getElementById('btnLabels');
 const btnScanpath = document.getElementById('btnScanpath');
+const btnLegend   = document.getElementById('btnLegend');
 
 let session       = null;
 let scrubMaxMs    = 30000;
@@ -470,21 +288,14 @@ let playStartMs   = 0;
 let darkMode      = false;
 let showLabels    = true;
 let showScanpath  = true;
+let showLegend    = true;
 
-// ─────────────────────────────────────────────
-// FILE LOADING
-// ─────────────────────────────────────────────
+// ── File loading ──────────────────────────────
 dropBox.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) loadFile(fileInput.files[0]);
-  fileInput.value = '';
-});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); fileInput.value = ''; });
 dropBox.addEventListener('dragover', e => { e.preventDefault(); dropBox.classList.add('over'); });
 dropBox.addEventListener('dragleave', () => dropBox.classList.remove('over'));
-dropBox.addEventListener('drop', e => {
-  e.preventDefault(); dropBox.classList.remove('over');
-  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
-});
+dropBox.addEventListener('drop', e => { e.preventDefault(); dropBox.classList.remove('over'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
 
 function loadFile(file) {
   loading.style.display = 'flex';
@@ -493,29 +304,19 @@ function loadFile(file) {
     let data;
     try { data = JSON.parse(e.target.result); }
     catch(err) { loading.style.display = 'none'; alert('Could not parse file.'); return; }
-    if (data._type !== 'webgazer_session') {
-      loading.style.display = 'none'; alert('Not a WebGazer session file.'); return;
-    }
+    if (data._type !== 'webgazer_session') { loading.style.display = 'none'; alert('Not a WebGazer session file.'); return; }
     session = data;
-    if (!session.scanpath || session.scanpath.length < 2) {
-      session.scanpath = buildScanpath(session.samples);
-    }
-    scrubMaxMs = session.actual_duration_ms
-      || (session.samples.length > 0 ? session.samples[session.samples.length-1].t_ms : 30000);
-    scrubRange.max   = scrubMaxMs;
-    scrubRange.value = scrubMaxMs;
-    scrubDur.textContent  = fmt(scrubMaxMs);
-    scrubTime.textContent = fmt(scrubMaxMs);
-    const n = session.samples.filter(s => s.valid).length;
+    if (!session.scanpath || session.scanpath.length < 2) session.scanpath = buildScanpath(session.samples);
+    scrubMaxMs = session.actual_duration_ms || (session.samples.length > 0 ? session.samples[session.samples.length-1].t_ms : 30000);
+    scrubRange.max = scrubMaxMs; scrubRange.value = scrubMaxMs;
+    scrubDur.textContent = fmt(scrubMaxMs); scrubTime.textContent = fmt(scrubMaxMs);
     dropzone.classList.add('hidden');
     resizeCanvas();
     setTimeout(() => {
       render(scrubMaxMs);
-      canvas.style.display    = 'block';
-      topbar.style.display    = 'flex';
-      hoverPanel.style.display = 'block';
-      scrubber.style.display  = 'flex';
-      loading.style.display   = 'none';
+      canvas.style.display = 'block'; topbar.style.display = 'flex';
+      hoverPanel.style.display = 'block'; scrubber.style.display = 'flex';
+      loading.style.display = 'none';
     }, 60);
   };
   reader.readAsText(file);
@@ -532,24 +333,17 @@ function buildScanpath(samples) {
   return out;
 }
 
-// ─────────────────────────────────────────────
-// CANVAS RESIZE
-// ─────────────────────────────────────────────
+// ── Canvas resize ─────────────────────────────
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  const W   = window.innerWidth;
-  const H   = window.innerHeight;
-  canvas.width  = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width  = W + 'px';
-  canvas.style.height = H + 'px';
+  const W = window.innerWidth, H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 window.addEventListener('resize', () => { resizeCanvas(); if (session) render(Number(scrubRange.value)); });
 
-// ─────────────────────────────────────────────
-// GRADIENT COLOR SAMPLER
-// ─────────────────────────────────────────────
+// ── Gradient ──────────────────────────────────
 function sampleGradient(t) {
   t = Math.max(0, Math.min(1, t));
   for (let i = 0; i < GRAD_STOPS.length - 1; i++) {
@@ -562,24 +356,18 @@ function sampleGradient(t) {
   return GRAD_STOPS[GRAD_STOPS.length-1];
 }
 
-// ─────────────────────────────────────────────
-// KDE FIELD
-// ─────────────────────────────────────────────
+// ── KDE field ─────────────────────────────────
 function buildKDEField(samples, maxT, bwFrac) {
   bwFrac = bwFrac || BANDWIDTH_FRAC;
-  const W = parseInt(canvas.style.width)  || canvas.width;
+  const W = parseInt(canvas.style.width) || canvas.width;
   const H = parseInt(canvas.style.height) || canvas.height;
-  const bw  = Math.min(W, H) * bwFrac;
-  const bw2 = bw * bw;
+  const bw = Math.min(W, H) * bwFrac, bw2 = bw * bw;
   const field = new Float32Array(KDE_GRID * KDE_GRID);
-
   for (const s of samples) {
     if (s.t_ms > maxT) break;
     if (!s.valid || typeof s.x_px !== 'number') continue;
-    const gx = (s.x_px / W) * KDE_GRID;
-    const gy = (s.y_px / H) * KDE_GRID;
-    const bwCells = (bw / W) * KDE_GRID;
-    const r = Math.ceil(bwCells * 2.5);
+    const gx = (s.x_px / W) * KDE_GRID, gy = (s.y_px / H) * KDE_GRID;
+    const bwCells = (bw / W) * KDE_GRID, r = Math.ceil(bwCells * 2.5);
     const x0 = Math.max(0, Math.floor(gx-r)), x1 = Math.min(KDE_GRID-1, Math.ceil(gx+r));
     const y0 = Math.max(0, Math.floor(gy-r)), y1 = Math.min(KDE_GRID-1, Math.ceil(gy+r));
     for (let cy = y0; cy <= y1; cy++) {
@@ -592,34 +380,37 @@ function buildKDEField(samples, maxT, bwFrac) {
   let maxVal = 0;
   for (let i = 0; i < field.length; i++) if (field[i] > maxVal) maxVal = field[i];
   if (maxVal > 0) for (let i = 0; i < field.length; i++) field[i] /= maxVal;
+  // Smooth cosine fade over wide margin — ensures all iso-contours close inside
+  // the grid regardless of how close fixations are to the screen edge.
+  // Wide enough to cover the largest kernel radius used by either pass.
+  const FADE = Math.round(KDE_GRID * 0.10); // 10% margin each side
+  for (let y = 0; y < KDE_GRID; y++) {
+    for (let x = 0; x < KDE_GRID; x++) {
+      const d = Math.min(x, KDE_GRID-1-x, y, KDE_GRID-1-y);
+      if (d < FADE) {
+        const t = d / FADE;
+        field[y*KDE_GRID+x] *= 0.5 - 0.5*Math.cos(Math.PI*t);
+      }
+    }
+  }
   return field;
 }
 
-// ─────────────────────────────────────────────
-// MARCHING SQUARES
-// ─────────────────────────────────────────────
+// ── Marching squares ──────────────────────────
 function marchingSquares(field, level) {
-  const segs  = [];
-  const lerp  = (a, b) => (level - a) / (b - a);
-
-  for (let gy = 1; gy < KDE_GRID - 2; gy++) {
-    for (let gx = 1; gx < KDE_GRID - 2; gx++) {
-      const tl = field[gy*KDE_GRID+gx],     tr = field[gy*KDE_GRID+gx+1];
+  const segs = [], lerp = (a, b) => (level - a) / (b - a);
+  for (let gy = 0; gy < KDE_GRID - 1; gy++) {
+    for (let gx = 0; gx < KDE_GRID - 1; gx++) {
+      const tl = field[gy*KDE_GRID+gx], tr = field[gy*KDE_GRID+gx+1];
       const bl = field[(gy+1)*KDE_GRID+gx], br = field[(gy+1)*KDE_GRID+gx+1];
       const cfg = (tl>=level?8:0)|(tr>=level?4:0)|(br>=level?2:0)|(bl>=level?1:0);
       if (cfg===0||cfg===15) continue;
-
-      const top   = {x:gx+lerp(tl,tr), y:gy};
-      const right = {x:gx+1,            y:gy+lerp(tr,br)};
-      const bot   = {x:gx+lerp(bl,br),  y:gy+1};
-      const left  = {x:gx,              y:gy+lerp(tl,bl)};
-
-      const map = {1:[left,bot],2:[bot,right],3:[left,right],4:[right,top],
-                   6:[bot,top],7:[left,top],8:[top,left],9:[top,bot],
-                   11:[top,right],12:[right,left],13:[bot,left],14:[right,bot]};
+      const top={x:gx+lerp(tl,tr),y:gy}, right={x:gx+1,y:gy+lerp(tr,br)};
+      const bot={x:gx+lerp(bl,br),y:gy+1}, left={x:gx,y:gy+lerp(tl,bl)};
+      const map={1:[left,bot],2:[bot,right],3:[left,right],4:[right,top],6:[bot,top],7:[left,top],8:[top,left],9:[top,bot],11:[top,right],12:[right,left],13:[bot,left],14:[right,bot]};
       if (map[cfg]) segs.push(map[cfg]);
-      else if (cfg===5)  { segs.push([top,right]); segs.push([bot,left]); }
-      else if (cfg===10) { segs.push([top,left]);  segs.push([bot,right]); }
+      else if (cfg===5) { segs.push([top,right]); segs.push([bot,left]); }
+      else if (cfg===10) { segs.push([top,left]); segs.push([bot,right]); }
     }
   }
   return chainSegs(segs);
@@ -627,10 +418,7 @@ function marchingSquares(field, level) {
 
 function chainSegs(segs) {
   if (!segs.length) return [];
-  const eps  = 0.001; // tight epsilon — only connect truly adjacent segments
-  const used = new Uint8Array(segs.length);
-  const chains = [];
-
+  const eps = 0.001, used = new Uint8Array(segs.length), chains = [];
   for (let i = 0; i < segs.length; i++) {
     if (used[i]) continue;
     used[i] = 1;
@@ -649,36 +437,19 @@ function chainSegs(segs) {
       }
     }
     if (chain.length < MIN_PTS) continue;
-
-    // Drop open chains that are very elongated (these are edge-crossing artifacts)
-    const isLoop = (chain[0].x-chain[chain.length-1].x)**2+(chain[0].y-chain[chain.length-1].y)**2 < 0.01;
-    if (!isLoop) {
-      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-      for (const p of chain) {
-        if (p.x<minX)minX=p.x; if (p.x>maxX)maxX=p.x;
-        if (p.y<minY)minY=p.y; if (p.y>maxY)maxY=p.y;
-      }
-      const spanX = maxX - minX, spanY = maxY - minY;
-      const longer = Math.max(spanX, spanY), shorter = Math.min(spanX, spanY);
-      // Kill open arcs where one dimension is > 6x the other
-      if (shorter < 0.5 || longer / (shorter + 0.001) > 6) continue;
-    }
-
     chains.push(chain);
   }
   return chains;
 }
 
-// ─────────────────────────────────────────────
-// CHAIKIN SMOOTHING
-// ─────────────────────────────────────────────
+// ── Chaikin smoothing ─────────────────────────
 function chaikin(pts, passes) {
   let p = pts;
   for (let pass = 0; pass < passes; pass++) {
     const np = [];
     for (let i = 0; i < p.length-1; i++) {
-      np.push({x: p[i].x*0.75+p[i+1].x*0.25, y: p[i].y*0.75+p[i+1].y*0.25});
-      np.push({x: p[i].x*0.25+p[i+1].x*0.75, y: p[i].y*0.25+p[i+1].y*0.75});
+      np.push({x:p[i].x*0.75+p[i+1].x*0.25, y:p[i].y*0.75+p[i+1].y*0.25});
+      np.push({x:p[i].x*0.25+p[i+1].x*0.75, y:p[i].y*0.25+p[i+1].y*0.75});
     }
     const isLoop = (p[0].x-p[p.length-1].x)**2+(p[0].y-p[p.length-1].y)**2 < 0.01;
     if (isLoop) np.push(np[0]); else { np.unshift(p[0]); np.push(p[p.length-1]); }
@@ -687,62 +458,170 @@ function chaikin(pts, passes) {
   return p;
 }
 
-// ─────────────────────────────────────────────
-// NEAREST FIXATION
-// ─────────────────────────────────────────────
+// ── Nearest fixation ──────────────────────────
 function buildFixLookup(scanPts, W, H) {
-  return scanPts.map(p => ({
-    gx: (p.x_px / W) * KDE_GRID,
-    gy: (p.y_px / H) * KDE_GRID,
-    gradT: p.x_px / W,
-  }));
+  return scanPts.map(p => ({ gx:(p.x_px/W)*KDE_GRID, gy:(p.y_px/H)*KDE_GRID, gradT:p.x_px/W }));
 }
-
 function nearestFix(gx, gy, fixList) {
-  if (!fixList.length) return { gradT: gx / KDE_GRID, distSq: 0 };
+  if (!fixList.length) return { gradT: gx/KDE_GRID, distSq: 0 };
   let bestD = Infinity, bestT = 0.5;
-  for (const f of fixList) {
-    const d = (gx-f.gx)**2 + (gy-f.gy)**2;
-    if (d < bestD) { bestD = d; bestT = f.gradT; }
-  }
+  for (const f of fixList) { const d=(gx-f.gx)**2+(gy-f.gy)**2; if(d<bestD){bestD=d;bestT=f.gradT;} }
   return { gradT: bestT, distSq: bestD };
 }
 
-// ─────────────────────────────────────────────
-// MAIN RENDER
-// ─────────────────────────────────────────────
+// ── Legend ────────────────────────────────────
+function drawLegend(W, H) {
+  if (!showLegend) return;
+
+  const ink  = darkMode ? 'rgba(255,255,255,0.72)' : 'rgba(26,24,20,0.58)';
+  const sub  = darkMode ? 'rgba(255,255,255,0.32)' : 'rgba(26,24,20,0.30)';
+  const bg   = darkMode ? 'rgba(14,14,16,0.82)'    : 'rgba(245,240,232,0.90)';
+  const bord = darkMode ? 'rgba(255,255,255,0.08)'  : 'rgba(26,24,20,0.09)';
+  const pin  = darkMode ? 'rgba(14,14,16,0.9)'      : 'rgba(255,255,255,0.9)';
+
+  const lineH  = 24;
+  const iconW  = 32;
+  const textW  = 148;
+  const boxPad = 12;
+  const boxW   = iconW + textW + boxPad * 2;
+
+  // 5 items
+  const items = [
+    {
+      label: 'Fixation node',
+      sub: 'size = gaze density',
+      draw(cx, cy) {
+        const col = sampleGradient(0.55);
+        ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.95)`; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy, 6*0.38, 0, Math.PI*2);
+        ctx.fillStyle = pin; ctx.fill();
+      }
+    },
+    {
+      label: '#N  gaze order',
+      sub: 'sequence number',
+      draw(cx, cy) {
+        const col = sampleGradient(0.55);
+        const pw = 24, ph = 15;
+        ctx.fillStyle = darkMode ? 'rgba(14,14,16,0.82)' : 'rgba(255,255,255,0.88)';
+        ctx.fillRect(cx - pw/2, cy - ph/2, pw, ph);
+        ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},1.0)`;
+        ctx.font = '300 9px "DM Mono", monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('#3', cx, cy);
+      }
+    },
+    {
+      label: '2.4s  time lingered',
+      sub: 'dwell at fixation',
+      draw(cx, cy) {
+        ctx.fillStyle = sub;
+        ctx.font = '300 9px "DM Mono", monospace';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('2.4s', cx, cy);
+      }
+    },
+    {
+      label: 'Contour rings',
+      sub: 'density + stimulus color',
+      draw(cx, cy) {
+        ctx.save();
+        for (let i = 2; i >= 0; i--) {
+          const t = i / 2;
+          const col = sampleGradient(0.15 + t * 0.7);
+          const r = 4 + i * 3.2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, Math.PI * 0.2, Math.PI * 1.9);
+          ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${0.45 + t * 0.5})`;
+          ctx.lineWidth = 0.85 + t * 0.6;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    },
+    {
+      label: 'Scanpath',
+      sub: 'gaze sequence trail',
+      draw(cx, cy) {
+        ctx.save();
+        ctx.beginPath(); ctx.moveTo(cx-10, cy); ctx.lineTo(cx+10, cy);
+        ctx.strokeStyle = darkMode ? 'rgba(255,255,255,0.40)' : 'rgba(26,24,20,0.28)';
+        ctx.lineWidth = 0.75;
+        ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.restore();
+      }
+    },
+  ];
+
+  const boxH = items.length * lineH + boxPad * 2 + 14; // +14 for header row
+  const bx   = W - boxW - 20;
+  const by   = H - 60 - boxH - 8; // sit just above the stamp
+
+  // Panel background
+  ctx.save();
+  ctx.fillStyle = bg;
+  ctx.strokeStyle = bord;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(bx, by, boxW, boxH, 3);
+  else ctx.rect(bx, by, boxW, boxH);
+  ctx.fill(); ctx.stroke();
+
+  // Section header
+  ctx.font = '300 9px "DM Mono", monospace';
+  ctx.fillStyle = darkMode ? 'rgba(255,255,255,0.22)' : 'rgba(26,24,20,0.22)';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText('LEGEND', bx + boxPad, by + boxPad - 1);
+
+  // Items
+  for (let i = 0; i < items.length; i++) {
+    const it  = items[i];
+    const iy  = by + boxPad + 14 + i * lineH;
+    const icx = bx + boxPad + iconW / 2;
+    const icy = iy + lineH / 2 - 1;
+    const tx  = bx + boxPad + iconW + 4;
+
+    // icon
+    it.draw(icx, icy);
+
+    // label
+    ctx.font = '300 10px "DM Mono", monospace';
+    ctx.fillStyle = ink;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(it.label, tx, icy - 4);
+
+    // sublabel
+    ctx.font = '300 9px "DM Mono", monospace';
+    ctx.fillStyle = sub;
+    ctx.fillText(it.sub, tx, icy + 7);
+  }
+
+  ctx.restore();
+}
+
+// ── Main render ───────────────────────────────
 function render(maxT) {
-  const W = parseInt(canvas.style.width)  || canvas.width;
+  const W = parseInt(canvas.style.width) || canvas.width;
   const H = parseInt(canvas.style.height) || canvas.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Background — paper or dark
   if (darkMode) {
-    ctx.fillStyle = '#0e0e10';
-    ctx.fillRect(0, 0, W, H);
-    // subtle dark grain
-    const grain = ctx.createImageData(W, H);
-    const gd = grain.data;
+    ctx.fillStyle = '#0e0e10'; ctx.fillRect(0, 0, W, H);
+    const grain = ctx.createImageData(W, H); const gd = grain.data;
     for (let i = 0; i < gd.length; i += 4) {
-      const v = Math.random() * 10 - 5;
-      gd[i]   = Math.max(0, Math.min(255, 14 + v));
-      gd[i+1] = Math.max(0, Math.min(255, 14 + v));
-      gd[i+2] = Math.max(0, Math.min(255, 16 + v));
-      gd[i+3] = 255;
+      const v = Math.random()*10-5;
+      gd[i]=Math.max(0,Math.min(255,14+v)); gd[i+1]=Math.max(0,Math.min(255,14+v));
+      gd[i+2]=Math.max(0,Math.min(255,16+v)); gd[i+3]=255;
     }
     ctx.putImageData(grain, 0, 0);
   } else {
-    ctx.fillStyle = '#f5f0e8';
-    ctx.fillRect(0, 0, W, H);
-    // paper grain
-    const grain = ctx.createImageData(W, H);
-    const gd = grain.data;
+    ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0, 0, W, H);
+    const grain = ctx.createImageData(W, H); const gd = grain.data;
     for (let i = 0; i < gd.length; i += 4) {
-      const v = Math.random() * 18 - 9;
-      gd[i]   = Math.max(0, Math.min(255, 245 + v));
-      gd[i+1] = Math.max(0, Math.min(255, 240 + v));
-      gd[i+2] = Math.max(0, Math.min(255, 232 + v));
-      gd[i+3] = 255;
+      const v = Math.random()*18-9;
+      gd[i]=Math.max(0,Math.min(255,245+v)); gd[i+1]=Math.max(0,Math.min(255,240+v));
+      gd[i+2]=Math.max(0,Math.min(255,232+v)); gd[i+3]=255;
     }
     ctx.putImageData(grain, 0, 0);
   }
@@ -758,10 +637,8 @@ function render(maxT) {
     return;
   }
 
-  // Two fields — tight for node rings, wide for landscape
   const fieldTight  = buildKDEField(session.samples, maxT, BANDWIDTH_FRAC);
   const fieldGlobal = buildKDEField(session.samples, maxT, BANDWIDTH_GLOBAL);
-
   const scanPts = session.scanpath.filter(p => p.t_ms <= maxT);
   const fixList = buildFixLookup(scanPts, W, H);
   const dwells  = scanPts.map((p, i) => {
@@ -769,147 +646,145 @@ function render(maxT) {
     return (nextT - p.t_ms) / 1000;
   });
 
-  // Helper — draw contour levels from a KDE field
+  // Remove artifact vertical streaks from a chain.
+  // Only cuts when 4+ consecutive segments are all within 5deg of vertical —
+  // that pattern is always an artifact. Single vertical segments are part of
+  // normal circular contours passing through vertical and are kept.
+  const VERT_THRESH = Math.cos(5 * Math.PI / 180); // |dy/len| > this = within 5deg of vertical
+  const VERT_RUN = 4; // consecutive vertical segs needed before cutting
+  function stripVertical(pts) {
+    const n = pts.length;
+    // Mark each segment as vertical or not
+    const vert = new Uint8Array(n - 1);
+    for (let i = 1; i < n; i++) {
+      const dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      vert[i-1] = (len > 0.001 && Math.abs(dy) / len > VERT_THRESH) ? 1 : 0;
+    }
+    // Mark for cutting: any segment belonging to a run of >= VERT_RUN consecutive verticals
+    const cut = new Uint8Array(n - 1);
+    let i = 0;
+    while (i < vert.length) {
+      if (vert[i]) {
+        let j = i;
+        while (j < vert.length && vert[j]) j++;
+        const runLen = j - i;
+        if (runLen >= VERT_RUN) {
+          for (let k = i; k < j; k++) cut[k] = 1;
+        }
+        i = j;
+      } else {
+        i++;
+      }
+    }
+
+    // Build sub-runs — keep non-cut segments, split when we hit a cut segment
+    const runs = [];
+    let curRun = [pts[0]];
+    for (let i = 1; i < n; i++) {
+      if (cut[i-1]) {
+        // this segment is a vertical artifact — end current run, skip this seg
+        if (curRun.length >= 2) runs.push(curRun);
+        curRun = [pts[i]]; // resume from end point (don't include the bad segment)
+      } else {
+        curRun.push(pts[i]);
+      }
+    }
+    if (curRun.length >= 2) runs.push(curRun);
+    return runs;
+  }
+
   function drawContours(field, nLevels, minLevel, falloffSq, alphaRange, lwRange) {
     const levels = [];
-    for (let i = 0; i < nLevels; i++) {
-      levels.push(minLevel + (1 - minLevel) * (i / (nLevels - 1)));
-    }
-    ctx.save();
-    ctx.lineJoin = 'round';
-    ctx.lineCap  = 'round';
-
+    for (let i = 0; i < nLevels; i++) levels.push(minLevel + (1-minLevel)*(i/(nLevels-1)));
+    ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (let li = 0; li < levels.length; li++) {
-      const level = levels[li];
-      const tl    = (level - minLevel) / (1 - minLevel);
+      const level = levels[li], tl = (level-minLevel)/(1-minLevel);
       const chains = marchingSquares(field, level);
-
       for (const chain of chains) {
         if (chain.length < MIN_PTS) continue;
         const sm = chaikin(chain, CHAIKIN_PASSES);
         if (sm.length < 2) continue;
-
-        // Centroid for nearest-fixation lookup
-        let sx = 0, sy = 0;
-        for (const p of sm) { sx += p.x; sy += p.y; }
-        const cgx = sx / sm.length, cgy = sy / sm.length;
-
-        const { gradT, distSq } = nearestFix(cgx, cgy, fixList);
+        let sx=0,sy=0; for(const p of sm){sx+=p.x;sy+=p.y;}
+        const cgx=sx/sm.length, cgy=sy/sm.length;
+        const {gradT, distSq} = nearestFix(cgx, cgy, fixList);
         const col = sampleGradient(gradT);
-        const proximity = Math.max(0.15, 1 - distSq / falloffSq);
-
-        const alpha = (alphaRange[0] + tl * alphaRange[1]) * proximity;
-        const lw    = (lwRange[0]    + tl * lwRange[1])    * (0.4 + proximity * 0.6);
-
-        const isLoop = (sm[0].x-sm[sm.length-1].x)**2+(sm[0].y-sm[sm.length-1].y)**2 < 0.25;
-
-        ctx.beginPath();
-        ctx.moveTo((sm[0].x / KDE_GRID) * W, (sm[0].y / KDE_GRID) * H);
-        for (let i = 1; i < sm.length; i++) {
-          ctx.lineTo((sm[i].x / KDE_GRID) * W, (sm[i].y / KDE_GRID) * H);
+        const proximity = Math.max(0.15, 1-distSq/falloffSq);
+        const alpha = (alphaRange[0]+tl*alphaRange[1])*proximity;
+        const lw    = (lwRange[0]+tl*lwRange[1])*(0.4+proximity*0.6);
+        ctx.strokeStyle=`rgba(${col.r},${col.g},${col.b},${alpha.toFixed(3)})`;
+        ctx.lineWidth=lw;
+        const runs = stripVertical(sm);
+        for (const run of runs) {
+          if (run.length < 2) continue;
+          ctx.beginPath();
+          ctx.moveTo((run[0].x/KDE_GRID)*W, (run[0].y/KDE_GRID)*H);
+          for(let i=1;i<run.length;i++) ctx.lineTo((run[i].x/KDE_GRID)*W,(run[i].y/KDE_GRID)*H);
+          ctx.stroke();
         }
-        if (isLoop) ctx.closePath();
-
-        ctx.strokeStyle = `rgba(${col.r},${col.g},${col.b},${alpha.toFixed(3)})`;
-        ctx.lineWidth   = lw;
-        ctx.stroke();
       }
     }
     ctx.restore();
   }
 
   const dm = darkMode ? 1.8 : 1.0;
+  drawContours(fieldGlobal, N_CONTOURS_GLOBAL, MIN_LEVEL_GLOBAL, (KDE_GRID*0.35)**2, [0.18*dm,0.45*dm], [0.7,1.4]);
+  drawContours(fieldTight,  N_CONTOURS,        MIN_LEVEL,         (KDE_GRID*0.10)**2, [0.45*dm,0.70*dm], [0.9,2.4]);
 
-  // 1. Global landscape — wide, fewer levels, faint, drawn first (underneath)
-  drawContours(
-    fieldGlobal,
-    N_CONTOURS_GLOBAL,
-    MIN_LEVEL_GLOBAL,
-    (KDE_GRID * 0.35) ** 2,
-    [0.18 * dm, 0.45 * dm],
-    [0.7,  1.4]
-  );
-
-  // 2. Tight node rings — sharp, many levels, vivid, drawn on top
-  drawContours(
-    fieldTight,
-    N_CONTOURS,
-    MIN_LEVEL,
-    (KDE_GRID * 0.10) ** 2,
-    [0.45 * dm, 0.70 * dm],
-    [0.9,  2.4]
-  );
-
-  // Scanpath line (toggleable layer)
+  // Scanpath line
   if (showScanpath && scanPts.length >= 2) {
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(scanPts[0].x_px, scanPts[0].y_px);
-    for (let i = 1; i < scanPts.length; i++) ctx.lineTo(scanPts[i].x_px, scanPts[i].y_px);
+    for (let i=1; i<scanPts.length; i++) ctx.lineTo(scanPts[i].x_px, scanPts[i].y_px);
     ctx.strokeStyle = darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(26,24,20,0.12)';
-    ctx.lineWidth = 0.75;
-    ctx.setLineDash([3, 5]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.lineWidth = 0.75; ctx.setLineDash([3,5]); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
 
-  // Fixation dots + labels (togglable layer)
+  // Fixation dots + labels
   if (showLabels) {
-  ctx.save();
-  ctx.font = '300 10px "DM Mono", monospace';
-  const labelCol = darkMode ? 'rgba(255,255,255,0.85)' : 'rgba(26,24,20,0.5)';
-  const pillBg   = darkMode ? 'rgba(14,14,16,0.82)' : 'rgba(255,255,255,0.88)';
-
-  for (let i = 0; i < scanPts.length; i++) {
-    const p      = scanPts[i];
-    const dwell  = dwells[i];
-    const gx     = Math.round((p.x_px / W) * (KDE_GRID - 1));
-    const gy     = Math.round((p.y_px / H) * (KDE_GRID - 1));
-    const idx    = Math.max(0, Math.min(KDE_GRID*KDE_GRID-1, gy*KDE_GRID+gx));
-    const density = fieldTight[idx] || 0;
-    const col    = sampleGradient(p.x_px / W);
-    const radius = 3 + density * 9;
-
-    // Dot
-    ctx.beginPath();
-    ctx.arc(p.x_px, p.y_px, radius, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.95)`;
-    ctx.fill();
-
-    // White/dark pin
-    ctx.beginPath();
-    ctx.arc(p.x_px, p.y_px, radius * 0.38, 0, Math.PI*2);
-    ctx.fillStyle = darkMode ? 'rgba(14,14,16,0.9)' : 'rgba(255,255,255,0.9)';
-    ctx.fill();
-
-    // Label
-    const lx = p.x_px + radius + 8, ly = p.y_px;
-    const l1 = `#${i+1}`, l2 = `${dwell.toFixed(1)}s`;
-    const pw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 10;
-    ctx.fillStyle = pillBg;
-    ctx.fillRect(lx - 3, ly - 14, pw, 26);
-    ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},1.0)`;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(l1, lx, ly - 5);
-    ctx.fillStyle = labelCol;
-    ctx.fillText(l2, lx, ly + 7);
-  }
-  ctx.restore();
+    ctx.save();
+    ctx.font = '300 10px "DM Mono", monospace';
+    const labelCol = darkMode ? 'rgba(255,255,255,0.85)' : 'rgba(26,24,20,0.5)';
+    const pillBg   = darkMode ? 'rgba(14,14,16,0.82)'    : 'rgba(255,255,255,0.88)';
+    for (let i = 0; i < scanPts.length; i++) {
+      const p = scanPts[i], dwell = dwells[i];
+      const gx = Math.round((p.x_px/W)*(KDE_GRID-1));
+      const gy = Math.round((p.y_px/H)*(KDE_GRID-1));
+      const idx = Math.max(0, Math.min(KDE_GRID*KDE_GRID-1, gy*KDE_GRID+gx));
+      const density = fieldTight[idx] || 0;
+      const col = sampleGradient(p.x_px/W);
+      const radius = 3 + density*9;
+      ctx.beginPath(); ctx.arc(p.x_px, p.y_px, radius, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.95)`; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x_px, p.y_px, radius*0.38, 0, Math.PI*2);
+      ctx.fillStyle = darkMode ? 'rgba(14,14,16,0.9)' : 'rgba(255,255,255,0.9)'; ctx.fill();
+      const lx = p.x_px+radius+8, ly = p.y_px;
+      const l1 = `#${i+1}`, l2 = `${dwell.toFixed(1)}s`;
+      const pw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 10;
+      ctx.fillStyle = pillBg; ctx.fillRect(lx-3, ly-14, pw, 26);
+      ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},1.0)`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(l1, lx, ly-5);
+      ctx.fillStyle = labelCol; ctx.fillText(l2, lx, ly+7);
+    }
+    ctx.restore();
   }
 
   // Stamp
   ctx.save();
   ctx.font = '300 10px "DM Mono", monospace';
-  ctx.fillStyle = 'rgba(26,24,20,0.18)';
+  ctx.fillStyle = darkMode ? 'rgba(255,255,255,0.18)' : 'rgba(26,24,20,0.18)';
   ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-  ctx.fillText(`${session.participant_id||'—'} · ${session.condition||'—'} · ${fmt(maxT)}`, W-20, H-60);
+  ctx.fillText(`${session.participant_id||'—'} · ${session.condition||'—'} · ${fmt(maxT)}`, W-20, H-12);
   ctx.restore();
+
+  // Legend — drawn last so it sits above everything, persists in PNG export
+  drawLegend(W, H);
 }
 
-// ─────────────────────────────────────────────
-// SCRUBBER
-// ─────────────────────────────────────────────
+// ── Scrubber ──────────────────────────────────
 function fmt(ms) { return (ms/1000).toFixed(1)+'s'; }
 
 scrubRange.addEventListener('input', () => {
@@ -923,7 +798,6 @@ function stopPlay() {
   if (playRafId) { cancelAnimationFrame(playRafId); playRafId = null; }
   isPlaying = false; scrubPlay.textContent = '▶';
 }
-
 function startPlay() {
   isPlaying = true; scrubPlay.textContent = '⏸';
   const from = Number(scrubRange.value) >= scrubMaxMs ? 0 : Number(scrubRange.value);
@@ -931,63 +805,52 @@ function startPlay() {
   function tick(now) {
     const t = playStartMs + (now - playStartWall);
     if (t >= scrubMaxMs) { scrubRange.value=scrubMaxMs; scrubTime.textContent=fmt(scrubMaxMs); render(scrubMaxMs); stopPlay(); return; }
-    scrubRange.value = t; scrubTime.textContent = fmt(t); render(t);
+    scrubRange.value=t; scrubTime.textContent=fmt(t); render(t);
     playRafId = requestAnimationFrame(tick);
   }
   playRafId = requestAnimationFrame(tick);
 }
-
 scrubPlay.addEventListener('click', () => { if (isPlaying) stopPlay(); else startPlay(); });
 
-// ─────────────────────────────────────────────
-// PANEL CONTROLS
-// ─────────────────────────────────────────────
+// ── Panel controls ────────────────────────────
 btnBeige.addEventListener('click', () => {
-  darkMode = false;
-  document.body.classList.remove('dark');
-  btnBeige.classList.add('active');
-  btnDark.classList.remove('active');
+  darkMode = false; document.body.classList.remove('dark');
+  btnBeige.classList.add('active'); btnDark.classList.remove('active');
   if (session) render(Number(scrubRange.value));
 });
-
 btnDark.addEventListener('click', () => {
-  darkMode = true;
-  document.body.classList.add('dark');
-  btnDark.classList.add('active');
-  btnBeige.classList.remove('active');
+  darkMode = true; document.body.classList.add('dark');
+  btnDark.classList.add('active'); btnBeige.classList.remove('active');
   if (session) render(Number(scrubRange.value));
 });
-
 btnLabels.addEventListener('click', () => {
-  showLabels = !showLabels;
-  btnLabels.classList.toggle('active', showLabels);
+  showLabels = !showLabels; btnLabels.classList.toggle('active', showLabels);
   if (session) render(Number(scrubRange.value));
 });
-
 btnScanpath.addEventListener('click', () => {
-  showScanpath = !showScanpath;
-  btnScanpath.classList.toggle('active', showScanpath);
+  showScanpath = !showScanpath; btnScanpath.classList.toggle('active', showScanpath);
+  if (session) render(Number(scrubRange.value));
+});
+btnLegend.addEventListener('click', () => {
+  showLegend = !showLegend; btnLegend.classList.toggle('active', showLegend);
   if (session) render(Number(scrubRange.value));
 });
 
-// ─────────────────────────────────────────────
-// RESET + EXPORT
-// ─────────────────────────────────────────────
+// ── Reset + Export ────────────────────────────
 resetBtn.addEventListener('click', () => {
   stopPlay(); session = null;
   canvas.style.display='none'; topbar.style.display='none';
   hoverPanel.style.display='none'; scrubber.style.display='none';
   dropzone.classList.remove('hidden');
 });
-
 exportBtn.addEventListener('click', () => {
   if (!session) return;
   canvas.toBlob(blob => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    const pid  = session.participant_id || 'p';
+    const pid = session.participant_id||'p';
     const cond = (session.condition||'cond').replace(/\s+/g,'_');
-    const t    = Math.round(Number(scrubRange.value)/1000);
+    const t = Math.round(Number(scrubRange.value)/1000);
     a.download = `topo_${pid}_${cond}_${t}s.png`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
