@@ -305,7 +305,7 @@ function loadFile(file) {
     try { data = JSON.parse(e.target.result); }
     catch(err) { loading.style.display = 'none'; alert('Could not parse file.'); return; }
     if (data._type !== 'webgazer_session') { loading.style.display = 'none'; alert('Not a WebGazer session file.'); return; }
-    session = data;
+    session = data; session._peakTight = null; session._peakGlobal = null;
     if (!session.scanpath || session.scanpath.length < 2) session.scanpath = buildScanpath(session.samples);
     scrubMaxMs = session.actual_duration_ms || (session.samples.length > 0 ? session.samples[session.samples.length-1].t_ms : 30000);
     scrubRange.max = scrubMaxMs; scrubRange.value = scrubMaxMs;
@@ -357,7 +357,7 @@ function sampleGradient(t) {
 }
 
 // ── KDE field ─────────────────────────────────
-function buildKDEField(samples, maxT, bwFrac, srcW, srcH) {
+function buildKDEField(samples, maxT, bwFrac, srcW, srcH, globalMax) {
   bwFrac = bwFrac || BANDWIDTH_FRAC;
   const W = parseInt(canvas.style.width) || canvas.width;
   const H = parseInt(canvas.style.height) || canvas.height;
@@ -388,7 +388,11 @@ function buildKDEField(samples, maxT, bwFrac, srcW, srcH) {
   }
   let maxVal = 0;
   for (let i = 0; i < field.length; i++) if (field[i] > maxVal) maxVal = field[i];
-  if (maxVal > 0) for (let i = 0; i < field.length; i++) field[i] /= maxVal;
+  field._rawMax = maxVal; // expose before normalization for peak caching
+  // Normalize against provided globalMax if given (keeps scale stable over time).
+  // Falls back to current frame max if not provided.
+  const norm = (globalMax && globalMax > 0) ? globalMax : maxVal;
+  if (norm > 0) for (let i = 0; i < field.length; i++) field[i] /= norm;
   // Smooth cosine fade over wide margin — ensures all iso-contours close inside
   // the grid regardless of how close fixations are to the screen edge.
   // Wide enough to cover the largest kernel radius used by either pass.
@@ -665,8 +669,11 @@ function render(maxT) {
   const srcH = session.screen_h || session.screenHeight || H;
   const sx = W / srcW, sy = H / srcH;
 
-  const fieldTight  = buildKDEField(session.samples, maxT, BANDWIDTH_FRAC,   srcW, srcH);
-  const fieldGlobal = buildKDEField(session.samples, maxT, BANDWIDTH_GLOBAL, srcW, srcH);
+  // Compute all-time peak from full session so normalization is stable over time
+  if (!session._peakTight)  session._peakTight  = buildKDEField(session.samples, Infinity, BANDWIDTH_FRAC,   srcW, srcH)._rawMax;
+  if (!session._peakGlobal) session._peakGlobal = buildKDEField(session.samples, Infinity, BANDWIDTH_GLOBAL, srcW, srcH)._rawMax;
+  const fieldTight  = buildKDEField(session.samples, maxT, BANDWIDTH_FRAC,   srcW, srcH, session._peakTight);
+  const fieldGlobal = buildKDEField(session.samples, maxT, BANDWIDTH_GLOBAL, srcW, srcH, session._peakGlobal);
   const scanPts = session.scanpath.filter(p => p.t_ms <= maxT);
   const fixList = buildFixLookup(scanPts, W, H, srcW, srcH);
   const dwells  = scanPts.map((p, i) => {
@@ -743,7 +750,7 @@ function render(maxT) {
   }
 
   const dm = darkMode ? 1.8 : 1.0;
-  drawContours(fieldGlobal, N_CONTOURS_GLOBAL, MIN_LEVEL_GLOBAL, (KDE_GRID*0.35)**2, [0.18*dm,0.45*dm], [0.7,1.4]);
+  drawContours(fieldGlobal, N_CONTOURS_GLOBAL, MIN_LEVEL_GLOBAL, (KDE_GRID*0.35)**2, [0.22*dm,0.50*dm], [1.0,1.8]);
   drawContours(fieldTight,  N_CONTOURS,        MIN_LEVEL,         (KDE_GRID*0.10)**2, [0.45*dm,0.70*dm], [0.9,2.4]);
 
   // Scanpath line
@@ -752,8 +759,8 @@ function render(maxT) {
     ctx.beginPath();
     ctx.moveTo(scanPts[0].x_px*sx, scanPts[0].y_px*sy);
     for (let i=1; i<scanPts.length; i++) ctx.lineTo(scanPts[i].x_px*sx, scanPts[i].y_px*sy);
-    ctx.strokeStyle = darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(26,24,20,0.12)';
-    ctx.lineWidth = 0.75; ctx.setLineDash([3,5]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(26,24,20,0.22)';
+    ctx.lineWidth = darkMode ? 0.75 : 1.0; ctx.setLineDash([3,5]); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
   }
 
