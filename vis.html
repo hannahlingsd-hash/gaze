@@ -267,8 +267,26 @@
     transition: background 300ms, border-color 300ms;
   }
   body.dark #scrubber {
-    background: rgba(14,14,16,0.90);
-    border-top-color: rgba(255,255,255,0.08);
+    background: rgba(14,14,16,0.95);
+    border-top-color: rgba(255,255,255,0.10);
+  }
+  body.dark #scrubTime,
+  body.dark #scrubDur {
+    color: rgba(255,255,255,0.6);
+  }
+  body.dark #scrubPlay {
+    border-color: rgba(255,255,255,0.20);
+    color: rgba(255,255,255,0.7);
+  }
+  body.dark #scrubPlay:hover { border-color: var(--accent); }
+  body.dark #scrubRange {
+    background: rgba(255,255,255,0.15);
+  }
+  body.dark #scrubRange::-webkit-slider-thumb {
+    background: rgba(255,255,255,0.8);
+  }
+  body.dark #scrubRange::-moz-range-thumb {
+    background: rgba(255,255,255,0.8);
   }
   #scrubTime {
     font-size: 11px;
@@ -402,11 +420,11 @@
 // ─────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────
-const KDE_GRID         = 200;   // higher res = sharper contours
-const N_CONTOURS       = 28;    // tight local rings
+const KDE_GRID         = 200;
+const N_CONTOURS       = 28;
 const MIN_LEVEL        = 0.03;
-const BANDWIDTH_FRAC   = 0.02;  // tight — for node rings
-const BANDWIDTH_GLOBAL = 0.065; // wide — for landscape contours
+const BANDWIDTH_FRAC   = 0.02;
+const BANDWIDTH_GLOBAL = 0.065;
 const N_CONTOURS_GLOBAL = 10;
 const MIN_LEVEL_GLOBAL  = 0.06;
 const CHAIKIN_PASSES   = 3;
@@ -581,12 +599,12 @@ function buildKDEField(samples, maxT, bwFrac) {
 // MARCHING SQUARES
 // ─────────────────────────────────────────────
 function marchingSquares(field, level) {
-  const segs = [];
-  const lerp = (a, b) => (level - a) / (b - a);
+  const segs  = [];
+  const lerp  = (a, b) => (level - a) / (b - a);
 
-  for (let gy = 0; gy < KDE_GRID-1; gy++) {
-    for (let gx = 0; gx < KDE_GRID-1; gx++) {
-      const tl = field[gy*KDE_GRID+gx], tr = field[gy*KDE_GRID+gx+1];
+  for (let gy = 1; gy < KDE_GRID - 2; gy++) {
+    for (let gx = 1; gx < KDE_GRID - 2; gx++) {
+      const tl = field[gy*KDE_GRID+gx],     tr = field[gy*KDE_GRID+gx+1];
       const bl = field[(gy+1)*KDE_GRID+gx], br = field[(gy+1)*KDE_GRID+gx+1];
       const cfg = (tl>=level?8:0)|(tr>=level?4:0)|(br>=level?2:0)|(bl>=level?1:0);
       if (cfg===0||cfg===15) continue;
@@ -599,7 +617,7 @@ function marchingSquares(field, level) {
       const map = {1:[left,bot],2:[bot,right],3:[left,right],4:[right,top],
                    6:[bot,top],7:[left,top],8:[top,left],9:[top,bot],
                    11:[top,right],12:[right,left],13:[bot,left],14:[right,bot]};
-      if (map[cfg]) { segs.push(map[cfg]); }
+      if (map[cfg]) segs.push(map[cfg]);
       else if (cfg===5)  { segs.push([top,right]); segs.push([bot,left]); }
       else if (cfg===10) { segs.push([top,left]);  segs.push([bot,right]); }
     }
@@ -609,9 +627,10 @@ function marchingSquares(field, level) {
 
 function chainSegs(segs) {
   if (!segs.length) return [];
-  const eps  = 0.01;
+  const eps  = 0.001; // tight epsilon — only connect truly adjacent segments
   const used = new Uint8Array(segs.length);
   const chains = [];
+
   for (let i = 0; i < segs.length; i++) {
     if (used[i]) continue;
     used[i] = 1;
@@ -619,21 +638,33 @@ function chainSegs(segs) {
     let grew = true;
     while (grew) {
       grew = false;
-      const head = chain[0], tail = chain[chain.length-1];
+      const head = chain[0], tail = chain[chain.length - 1];
       for (let j = 0; j < segs.length; j++) {
         if (used[j]) continue;
         const [a, b] = segs[j];
-        const dta = (tail.x-a.x)**2+(tail.y-a.y)**2;
-        const dtb = (tail.x-b.x)**2+(tail.y-b.y)**2;
-        const dha = (head.x-a.x)**2+(head.y-a.y)**2;
-        const dhb = (head.x-b.x)**2+(head.y-b.y)**2;
-        if (dta<eps) { chain.push(b); used[j]=1; grew=true; break; }
-        if (dtb<eps) { chain.push(a); used[j]=1; grew=true; break; }
-        if (dha<eps) { chain.unshift(b); used[j]=1; grew=true; break; }
-        if (dhb<eps) { chain.unshift(a); used[j]=1; grew=true; break; }
+        if ((tail.x-a.x)**2+(tail.y-a.y)**2 < eps) { chain.push(b); used[j]=1; grew=true; break; }
+        if ((tail.x-b.x)**2+(tail.y-b.y)**2 < eps) { chain.push(a); used[j]=1; grew=true; break; }
+        if ((head.x-a.x)**2+(head.y-a.y)**2 < eps) { chain.unshift(b); used[j]=1; grew=true; break; }
+        if ((head.x-b.x)**2+(head.y-b.y)**2 < eps) { chain.unshift(a); used[j]=1; grew=true; break; }
       }
     }
-    if (chain.length >= MIN_PTS) chains.push(chain);
+    if (chain.length < MIN_PTS) continue;
+
+    // Drop open chains that are very elongated (these are edge-crossing artifacts)
+    const isLoop = (chain[0].x-chain[chain.length-1].x)**2+(chain[0].y-chain[chain.length-1].y)**2 < 0.01;
+    if (!isLoop) {
+      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+      for (const p of chain) {
+        if (p.x<minX)minX=p.x; if (p.x>maxX)maxX=p.x;
+        if (p.y<minY)minY=p.y; if (p.y>maxY)maxY=p.y;
+      }
+      const spanX = maxX - minX, spanY = maxY - minY;
+      const longer = Math.max(spanX, spanY), shorter = Math.min(spanX, spanY);
+      // Kill open arcs where one dimension is > 6x the other
+      if (shorter < 0.5 || longer / (shorter + 0.001) > 6) continue;
+    }
+
+    chains.push(chain);
   }
   return chains;
 }
@@ -738,7 +769,7 @@ function render(maxT) {
     return (nextT - p.t_ms) / 1000;
   });
 
-  // Helper — draw a set of contour levels from a field
+  // Helper — draw contour levels from a KDE field
   function drawContours(field, nLevels, minLevel, falloffSq, alphaRange, lwRange) {
     const levels = [];
     for (let i = 0; i < nLevels; i++) {
@@ -758,19 +789,7 @@ function render(maxT) {
         const sm = chaikin(chain, CHAIKIN_PASSES);
         if (sm.length < 2) continue;
 
-        // Discard chains that are far too elongated — these are open arcs
-        // running off-screen edges that look like vertical/horizontal lines
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        for (const p of sm) {
-          if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-          if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-        }
-        const bboxW = maxX - minX, bboxH = maxY - minY;
-        const aspect = Math.max(bboxW, bboxH) / (Math.min(bboxW, bboxH) + 0.001);
-        // Skip if aspect ratio > 8 AND the chain is not closed (open arc)
-        const isLoop = (sm[0].x-sm[sm.length-1].x)**2+(sm[0].y-sm[sm.length-1].y)**2 < 0.25;
-        if (!isLoop && aspect > 8) continue;
-
+        // Centroid for nearest-fixation lookup
         let sx = 0, sy = 0;
         for (const p of sm) { sx += p.x; sy += p.y; }
         const cgx = sx / sm.length, cgy = sy / sm.length;
@@ -781,6 +800,8 @@ function render(maxT) {
 
         const alpha = (alphaRange[0] + tl * alphaRange[1]) * proximity;
         const lw    = (lwRange[0]    + tl * lwRange[1])    * (0.4 + proximity * 0.6);
+
+        const isLoop = (sm[0].x-sm[sm.length-1].x)**2+(sm[0].y-sm[sm.length-1].y)**2 < 0.25;
 
         ctx.beginPath();
         ctx.moveTo((sm[0].x / KDE_GRID) * W, (sm[0].y / KDE_GRID) * H);
@@ -797,7 +818,7 @@ function render(maxT) {
     ctx.restore();
   }
 
-  const dm = darkMode ? 1.6 : 1.0; // boost visibility on dark bg
+  const dm = darkMode ? 1.8 : 1.0;
 
   // 1. Global landscape — wide, fewer levels, faint, drawn first (underneath)
   drawContours(
@@ -805,8 +826,8 @@ function render(maxT) {
     N_CONTOURS_GLOBAL,
     MIN_LEVEL_GLOBAL,
     (KDE_GRID * 0.35) ** 2,
-    [0.10 * dm, 0.30 * dm],
-    [0.4,  0.8]
+    [0.18 * dm, 0.45 * dm],
+    [0.7,  1.4]
   );
 
   // 2. Tight node rings — sharp, many levels, vivid, drawn on top
@@ -815,8 +836,8 @@ function render(maxT) {
     N_CONTOURS,
     MIN_LEVEL,
     (KDE_GRID * 0.10) ** 2,
-    [0.30 * dm, 0.60 * dm],
-    [0.6,  1.6]
+    [0.45 * dm, 0.70 * dm],
+    [0.9,  2.4]
   );
 
   // Scanpath line (toggleable layer)
@@ -825,7 +846,7 @@ function render(maxT) {
     ctx.beginPath();
     ctx.moveTo(scanPts[0].x_px, scanPts[0].y_px);
     for (let i = 1; i < scanPts.length; i++) ctx.lineTo(scanPts[i].x_px, scanPts[i].y_px);
-    ctx.strokeStyle = 'rgba(26,24,20,0.12)';
+    ctx.strokeStyle = darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(26,24,20,0.12)';
     ctx.lineWidth = 0.75;
     ctx.setLineDash([3, 5]);
     ctx.stroke();
