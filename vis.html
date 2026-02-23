@@ -357,23 +357,32 @@ function sampleGradient(t) {
 }
 
 // ── KDE field ─────────────────────────────────
-function buildKDEField(samples, maxT, bwFrac) {
+function buildKDEField(samples, maxT, bwFrac, srcW, srcH) {
   bwFrac = bwFrac || BANDWIDTH_FRAC;
   const W = parseInt(canvas.style.width) || canvas.width;
   const H = parseInt(canvas.style.height) || canvas.height;
-  const bw = Math.min(W, H) * bwFrac, bw2 = bw * bw;
+  // Use recorded screen dimensions so field maps correctly regardless of current window size
+  srcW = srcW || W; srcH = srcH || H;
+  // Use separate x/y bandwidths so the kernel is isotropic in screen-space
+  // regardless of aspect ratio. bwFrac is fraction of the shorter dimension.
+  const bwPx = Math.min(srcW, srcH) * bwFrac;
+  const bw2x = bwPx * bwPx, bw2y = bwPx * bwPx;
+  // Kernel radius in grid cells — use the axis with more cells per pixel
+  const cellPxX = srcW / KDE_GRID, cellPxY = srcH / KDE_GRID;
+  const rX = Math.ceil((bwPx / cellPxX) * 2.5);
+  const rY = Math.ceil((bwPx / cellPxY) * 2.5);
   const field = new Float32Array(KDE_GRID * KDE_GRID);
   for (const s of samples) {
     if (s.t_ms > maxT) break;
     if (!s.valid || typeof s.x_px !== 'number') continue;
-    const gx = (s.x_px / W) * KDE_GRID, gy = (s.y_px / H) * KDE_GRID;
-    const bwCells = (bw / W) * KDE_GRID, r = Math.ceil(bwCells * 2.5);
-    const x0 = Math.max(0, Math.floor(gx-r)), x1 = Math.min(KDE_GRID-1, Math.ceil(gx+r));
-    const y0 = Math.max(0, Math.floor(gy-r)), y1 = Math.min(KDE_GRID-1, Math.ceil(gy+r));
+    const gx = (s.x_px / srcW) * KDE_GRID, gy = (s.y_px / srcH) * KDE_GRID;
+    const x0 = Math.max(0, Math.floor(gx-rX)), x1 = Math.min(KDE_GRID-1, Math.ceil(gx+rX));
+    const y0 = Math.max(0, Math.floor(gy-rY)), y1 = Math.min(KDE_GRID-1, Math.ceil(gy+rY));
     for (let cy = y0; cy <= y1; cy++) {
       for (let cx = x0; cx <= x1; cx++) {
-        const dx = (cx/KDE_GRID)*W - s.x_px, dy = (cy/KDE_GRID)*H - s.y_px;
-        field[cy*KDE_GRID+cx] += Math.exp(-(dx*dx+dy*dy)/(2*bw2));
+        // dx/dy in screen pixels so the kernel is a true circle in screen space
+        const dx = cx * cellPxX - s.x_px, dy = cy * cellPxY - s.y_px;
+        field[cy*KDE_GRID+cx] += Math.exp(-(dx*dx/bw2x + dy*dy/bw2y));
       }
     }
   }
@@ -383,7 +392,9 @@ function buildKDEField(samples, maxT, bwFrac) {
   // Smooth cosine fade over wide margin — ensures all iso-contours close inside
   // the grid regardless of how close fixations are to the screen edge.
   // Wide enough to cover the largest kernel radius used by either pass.
-  const FADE = Math.round(KDE_GRID * 0.10); // 10% margin each side
+  // Narrow fade — just enough to force contours closed at the border.
+  // Keep it small (3 cells) so rings near the screen edge aren't visibly clipped.
+  const FADE = 3;
   for (let y = 0; y < KDE_GRID; y++) {
     for (let x = 0; x < KDE_GRID; x++) {
       const d = Math.min(x, KDE_GRID-1-x, y, KDE_GRID-1-y);
@@ -437,6 +448,17 @@ function chainSegs(segs) {
       }
     }
     if (chain.length < MIN_PTS) continue;
+
+    // Compute bounding box
+    let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+    for (const p of chain) {
+      if (p.x < minX) minX=p.x; if (p.x > maxX) maxX=p.x;
+      if (p.y < minY) minY=p.y; if (p.y > maxY) maxY=p.y;
+    }
+    const spanX = maxX - minX, spanY = maxY - minY;
+    // Kill only very thin near-vertical chains — genuinely impossible for real contour rings
+    if (spanX < 2 && spanY > spanX * 3) continue;
+
     chains.push(chain);
   }
   return chains;
@@ -459,8 +481,9 @@ function chaikin(pts, passes) {
 }
 
 // ── Nearest fixation ──────────────────────────
-function buildFixLookup(scanPts, W, H) {
-  return scanPts.map(p => ({ gx:(p.x_px/W)*KDE_GRID, gy:(p.y_px/H)*KDE_GRID, gradT:p.x_px/W }));
+function buildFixLookup(scanPts, W, H, srcW, srcH) {
+  srcW = srcW||W; srcH = srcH||H;
+  return scanPts.map(p => ({ gx:(p.x_px/srcW)*KDE_GRID, gy:(p.y_px/srcH)*KDE_GRID, gradT:p.x_px/srcW }));
 }
 function nearestFix(gx, gy, fixList) {
   if (!fixList.length) return { gradT: gx/KDE_GRID, distSq: 0 };
@@ -637,60 +660,52 @@ function render(maxT) {
     return;
   }
 
-  const fieldTight  = buildKDEField(session.samples, maxT, BANDWIDTH_FRAC);
-  const fieldGlobal = buildKDEField(session.samples, maxT, BANDWIDTH_GLOBAL);
+  // Scale recorded pixel coords to current canvas size
+  const srcW = session.screen_w || session.screenWidth || W;
+  const srcH = session.screen_h || session.screenHeight || H;
+  const sx = W / srcW, sy = H / srcH;
+
+  const fieldTight  = buildKDEField(session.samples, maxT, BANDWIDTH_FRAC,   srcW, srcH);
+  const fieldGlobal = buildKDEField(session.samples, maxT, BANDWIDTH_GLOBAL, srcW, srcH);
   const scanPts = session.scanpath.filter(p => p.t_ms <= maxT);
-  const fixList = buildFixLookup(scanPts, W, H);
+  const fixList = buildFixLookup(scanPts, W, H, srcW, srcH);
   const dwells  = scanPts.map((p, i) => {
     const nextT = i < scanPts.length-1 ? scanPts[i+1].t_ms : maxT;
     return (nextT - p.t_ms) / 1000;
   });
 
-  // Remove artifact vertical streaks from a chain.
-  // Only cuts when 4+ consecutive segments are all within 5deg of vertical —
-  // that pattern is always an artifact. Single vertical segments are part of
-  // normal circular contours passing through vertical and are kept.
-  const VERT_THRESH = Math.cos(5 * Math.PI / 180); // |dy/len| > this = within 5deg of vertical
-  const VERT_RUN = 4; // consecutive vertical segs needed before cutting
+  // Post-process: remove runs of 5+ consecutive segments within 4deg of vertical.
+  // Operates in screen-pixel space so angle is measured correctly.
+  // Returns array of sub-runs with vertical streaks excised.
   function stripVertical(pts) {
     const n = pts.length;
-    // Mark each segment as vertical or not
     const vert = new Uint8Array(n - 1);
     for (let i = 1; i < n; i++) {
-      const dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
-      const len = Math.sqrt(dx*dx + dy*dy);
-      vert[i-1] = (len > 0.001 && Math.abs(dy) / len > VERT_THRESH) ? 1 : 0;
+      // pts are in grid space — convert dx/dy to screen pixels for correct angle
+      const dxPx = (pts[i].x - pts[i-1].x) / KDE_GRID * W;
+      const dyPx = (pts[i].y - pts[i-1].y) / KDE_GRID * H;
+      const len = Math.sqrt(dxPx*dxPx + dyPx*dyPx);
+      // within 10deg of vertical: |dyPx|/len > cos(10deg) = 0.9848
+      vert[i-1] = (len > 0.5 && Math.abs(dyPx) / len > 0.9848) ? 1 : 0;
     }
-    // Mark for cutting: any segment belonging to a run of >= VERT_RUN consecutive verticals
+    // Cut runs of 3+ consecutive vertical segments
     const cut = new Uint8Array(n - 1);
     let i = 0;
     while (i < vert.length) {
       if (vert[i]) {
         let j = i;
         while (j < vert.length && vert[j]) j++;
-        const runLen = j - i;
-        if (runLen >= VERT_RUN) {
-          for (let k = i; k < j; k++) cut[k] = 1;
-        }
+        if (j - i >= 3) for (let k = i; k < j; k++) cut[k] = 1;
         i = j;
-      } else {
-        i++;
-      }
+      } else { i++; }
     }
-
-    // Build sub-runs — keep non-cut segments, split when we hit a cut segment
     const runs = [];
-    let curRun = [pts[0]];
+    let run = [pts[0]];
     for (let i = 1; i < n; i++) {
-      if (cut[i-1]) {
-        // this segment is a vertical artifact — end current run, skip this seg
-        if (curRun.length >= 2) runs.push(curRun);
-        curRun = [pts[i]]; // resume from end point (don't include the bad segment)
-      } else {
-        curRun.push(pts[i]);
-      }
+      if (cut[i-1]) { if (run.length >= 2) runs.push(run); run = [pts[i]]; }
+      else run.push(pts[i]);
     }
-    if (curRun.length >= 2) runs.push(curRun);
+    if (run.length >= 2) runs.push(run);
     return runs;
   }
 
@@ -719,7 +734,7 @@ function render(maxT) {
           if (run.length < 2) continue;
           ctx.beginPath();
           ctx.moveTo((run[0].x/KDE_GRID)*W, (run[0].y/KDE_GRID)*H);
-          for(let i=1;i<run.length;i++) ctx.lineTo((run[i].x/KDE_GRID)*W,(run[i].y/KDE_GRID)*H);
+          for (let i=1;i<run.length;i++) ctx.lineTo((run[i].x/KDE_GRID)*W,(run[i].y/KDE_GRID)*H);
           ctx.stroke();
         }
       }
@@ -735,8 +750,8 @@ function render(maxT) {
   if (showScanpath && scanPts.length >= 2) {
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(scanPts[0].x_px, scanPts[0].y_px);
-    for (let i=1; i<scanPts.length; i++) ctx.lineTo(scanPts[i].x_px, scanPts[i].y_px);
+    ctx.moveTo(scanPts[0].x_px*sx, scanPts[0].y_px*sy);
+    for (let i=1; i<scanPts.length; i++) ctx.lineTo(scanPts[i].x_px*sx, scanPts[i].y_px*sy);
     ctx.strokeStyle = darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(26,24,20,0.12)';
     ctx.lineWidth = 0.75; ctx.setLineDash([3,5]); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
@@ -750,17 +765,18 @@ function render(maxT) {
     const pillBg   = darkMode ? 'rgba(14,14,16,0.82)'    : 'rgba(255,255,255,0.88)';
     for (let i = 0; i < scanPts.length; i++) {
       const p = scanPts[i], dwell = dwells[i];
-      const gx = Math.round((p.x_px/W)*(KDE_GRID-1));
-      const gy = Math.round((p.y_px/H)*(KDE_GRID-1));
+      const gx = Math.round((p.x_px/srcW)*(KDE_GRID-1));
+      const gy = Math.round((p.y_px/srcH)*(KDE_GRID-1));
       const idx = Math.max(0, Math.min(KDE_GRID*KDE_GRID-1, gy*KDE_GRID+gx));
       const density = fieldTight[idx] || 0;
-      const col = sampleGradient(p.x_px/W);
+      const col = sampleGradient(p.x_px/srcW);
       const radius = 3 + density*9;
-      ctx.beginPath(); ctx.arc(p.x_px, p.y_px, radius, 0, Math.PI*2);
+      const px = p.x_px*sx, py = p.y_px*sy;
+      ctx.beginPath(); ctx.arc(px, py, radius, 0, Math.PI*2);
       ctx.fillStyle = `rgba(${col.r},${col.g},${col.b},0.95)`; ctx.fill();
-      ctx.beginPath(); ctx.arc(p.x_px, p.y_px, radius*0.38, 0, Math.PI*2);
+      ctx.beginPath(); ctx.arc(px, py, radius*0.38, 0, Math.PI*2);
       ctx.fillStyle = darkMode ? 'rgba(14,14,16,0.9)' : 'rgba(255,255,255,0.9)'; ctx.fill();
-      const lx = p.x_px+radius+8, ly = p.y_px;
+      const lx = px+radius+8, ly = py;
       const l1 = `#${i+1}`, l2 = `${dwell.toFixed(1)}s`;
       const pw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 10;
       ctx.fillStyle = pillBg; ctx.fillRect(lx-3, ly-14, pw, 26);
