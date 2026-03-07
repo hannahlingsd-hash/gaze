@@ -1174,15 +1174,61 @@
     downloadJsonBtn.addEventListener('click', downloadJSON);
 
     // --------- Export / Load Session (.wgz) ----------
-    function exportSession() {
+
+    // Capture the current stimulus as a base64 PNG data URL
+    // Works for both the default gradient and any uploaded image
+    function captureStimulusDataURL() {
+      return new Promise((resolve) => {
+        const r = getStimulusRect();
+        const W = Math.round(r.width);
+        const H = Math.round(r.height);
+        const off = document.createElement('canvas');
+        off.width = W; off.height = H;
+        const oc = off.getContext('2d');
+
+        const doCapture = () => {
+          resolve(off.toDataURL('image/png'));
+        };
+
+        if (stimulusObjectURL) {
+          const img = new Image();
+          img.onload = () => { oc.drawImage(img, 0, 0, W, H); doCapture(); };
+          img.onerror = () => { drawDefaultGradient(oc, W, H); doCapture(); };
+          img.src = stimulusObjectURL;
+        } else {
+          drawDefaultGradient(oc, W, H);
+          doCapture();
+        }
+      });
+    }
+
+    function drawDefaultGradient(oc, W, H) {
+      const grad = oc.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0,    '#0b0b1a');
+      grad.addColorStop(0.25, '#1d3b7a');
+      grad.addColorStop(0.5,  '#2bb3a3');
+      grad.addColorStop(0.75, '#f4d35e');
+      grad.addColorStop(1,    '#f95738');
+      oc.fillStyle = grad;
+      oc.fillRect(0, 0, W, H);
+    }
+
+    async function exportSession() {
       if (trialSamples.length === 0) {
         alert('No trial data to export. Run a trial first.');
         return;
       }
+
+      const exportBtn = document.getElementById('exportSession');
+      exportBtn.disabled = true;
+      exportBtn.textContent = '…saving';
+
       const actualDuration = trialSamples[trialSamples.length - 1].t_ms;
+      const stimulusDataURL = await captureStimulusDataURL();
+
       const payload = {
         _type: 'webgazer_session',
-        _version: 1,
+        _version: 2,
         exported_at_iso: new Date().toISOString(),
         participant_id: pidEl.value.trim() || null,
         condition:      condEl.value.trim() || null,
@@ -1190,6 +1236,9 @@
         actual_duration_ms: actualDuration,
         sample_every_ms: SAMPLE_EVERY_MS,
         aoi_grid_n:     AOI_N,
+        screen_w:       window.innerWidth,
+        screen_h:       window.innerHeight,
+        stimulus_image: stimulusDataURL,   // ← embedded stimulus as base64 PNG
         samples:        trialSamples,
         scanpath:       trialScanpath
       };
@@ -1201,6 +1250,9 @@
       a.download = `session_${pid}_${cond}_${Date.now()}.wgz`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+
+      exportBtn.disabled = false;
+      exportBtn.textContent = '↓ Export Session';
     }
 
     function loadSession(file) {
@@ -1219,7 +1271,19 @@
           return;
         }
 
-        if (isRecording) return;
+        // Restore stimulus image if embedded
+        if (data.stimulus_image) {
+          if (stimulusObjectURL) URL.revokeObjectURL(stimulusObjectURL);
+          // Convert data URL back to object URL via blob
+          fetch(data.stimulus_image)
+            .then(r => r.blob())
+            .then(blob => {
+              stimulusObjectURL = URL.createObjectURL(blob);
+              stimulusEl.style.background = `url(${stimulusObjectURL}) center/cover no-repeat`;
+              stimulusNote.style.display = 'block';
+            })
+            .catch(() => {});
+        }
 
         // Restore state
         trialSamples  = data.samples  || [];
@@ -1243,7 +1307,7 @@
       reader.readAsText(file);
     }
 
-    document.getElementById('exportSession').addEventListener('click', exportSession);
+    document.getElementById('exportSession').addEventListener('click', () => exportSession());
 
     const sessionFileInput = document.getElementById('sessionFileInput');
     document.getElementById('loadSession').addEventListener('click', () => sessionFileInput.click());
