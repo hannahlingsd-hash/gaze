@@ -125,18 +125,6 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
 .dist-bar{height:100%;border-radius:1px;transition:width 600ms ease;}
 .dist-val{font-size:10px;color:var(--muted);min-width:40px;text-align:right;}
 
-/* Entropy gauge */
-#entropyGauge{display:flex;align-items:center;gap:24px;margin-top:8px;}
-.entropy-arc-wrap{flex-shrink:0;}
-.entropy-info{flex:1;}
-.entropy-num{font-family:'Cormorant Garamond',serif;font-size:40px;letter-spacing:-0.02em;line-height:1;}
-.entropy-label{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5;}
-.entropy-scale{display:flex;gap:0;margin-top:14px;border-radius:2px;overflow:hidden;height:4px;}
-.entropy-scale span{flex:1;}
-
-/* Saccade histogram */
-.hist-wrap{position:relative;}
-
 /* Footer */
 #footer{padding:20px 40px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:10px;letter-spacing:0.08em;}
 
@@ -160,7 +148,7 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
     <div class="icon">◎</div>
     <p>Drop a <strong>.wgz</strong> session file here<br>or click to browse</p>
   </div>
-  <div class="drop-sub">computes fixation · entropy · saccade metrics</div>
+  <div class="drop-sub">fixation · entropy · saccade · color dwell</div>
   <input type="file" id="fileIn" accept=".wgz,.json"/>
 </div>
 
@@ -230,7 +218,7 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
       <div id="entropyDetail" style="margin-top:16px;"></div>
     </div>
 
-    <!-- 3. Saccade amplitude histogram -->
+    <!-- 3. Saccade amplitude over time -->
     <div class="section">
       <div class="section-label">
         <div class="section-dot" style="background:var(--accent3)"></div>
@@ -239,21 +227,21 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
       <canvas id="saccadeCanvas" class="chart" height="160"></canvas>
       <div id="saccadeStats" style="margin-top:14px;display:flex;gap:24px;flex-wrap:wrap;"></div>
     </div>
+
     <!-- 4. Color dwell analysis -->
     <div class="section">
       <div class="section-label">
         <div class="section-dot" style="background:var(--accent4)"></div>
         Color Dwell Analysis
-        <span style="font-size:9px;color:var(--muted);font-weight:normal;letter-spacing:0.05em;text-transform:none;margin-left:4px;">— dwell time per stimulus color region</span>
       </div>
       <!-- stimulus image is embedded in the .wgz session file automatically -->
       <!-- 30s fixation timeline -->
-      <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Fixation timeline</div>
-      <canvas id="colorTimelineCanvas" class="chart" height="52"></canvas>
+      <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Fixation timeline · height = dwell duration</div>
+      <canvas id="colorTimelineCanvas" class="chart" height="110"></canvas>
       <!-- color dwell summary -->
-      <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-top:18px;margin-bottom:8px;">Total dwell per color</div>
-      <canvas id="colorDwellCanvas" class="chart" height="80"></canvas>
-      <div id="colorDwellStats" style="margin-top:14px;"></div>
+      <div style="font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-top:16px;margin-bottom:6px;">Total dwell per color</div>
+      <canvas id="colorDwellCanvas" class="chart" height="28"></canvas>
+      <div id="colorDwellStats" style="margin-top:12px;"></div>
     </div>
 
   </div>
@@ -323,11 +311,10 @@ function analyze(session){
   document.getElementById('footerTimestamp').textContent=session.exported_at_iso||'';
 
   // ── 1. Fixation durations ──────────────────────────────
-  // Each scanpath point's dwell = time until next point (or end)
   const fixDurations=scanpath.map((p,i)=>{
     const nextT=i<scanpath.length-1?scanpath[i+1].t_ms:maxT;
     return(nextT-p.t_ms)/1000;
-  }).filter(d=>d>0&&d<10); // sanity cap at 10s
+  }).filter(d=>d>0&&d<10);
 
   const mfd=fixDurations.length?fixDurations.reduce((a,b)=>a+b,0)/fixDurations.length:0;
   const mfdMedian=median(fixDurations);
@@ -337,13 +324,9 @@ function analyze(session){
   document.getElementById('valMFD').innerHTML=mfd.toFixed(2)+'<span class="stat-unit">s</span>';
   document.getElementById('subMFD').textContent=`median ${mfdMedian.toFixed(2)}s · range ${mfdMin.toFixed(2)}–${mfdMax.toFixed(1)}s · n=${fixDurations.length}`;
 
-  // Duration bins (0–0.5s, 0.5–1s, 1–2s, 2–4s, 4s+)
   const durBins=[
-    {label:'< 0.5s',lo:0,hi:0.5,color:'var(--accent)'},
-    {label:'0.5–1s',lo:0.5,hi:1.0,color:'var(--accent)'},
-    {label:'1–2s',lo:1.0,hi:2.0,color:'var(--accent)'},
-    {label:'2–4s',lo:2.0,hi:4.0,color:'var(--accent)'},
-    {label:'4s +',lo:4.0,hi:Infinity,color:'var(--accent)'},
+    {label:'< 0.5s',lo:0,hi:0.5},{label:'0.5–1s',lo:0.5,hi:1.0},
+    {label:'1–2s',lo:1.0,hi:2.0},{label:'2–4s',lo:2.0,hi:4.0},{label:'4s +',lo:4.0,hi:Infinity},
   ];
   const binCounts=durBins.map(b=>fixDurations.filter(d=>d>=b.lo&&d<b.hi).length);
   const binMax=Math.max(...binCounts,1);
@@ -358,14 +341,12 @@ function analyze(session){
       <div class="dist-val">${binCounts[i]}</div>`;
     fixDistEl.appendChild(row);
   });
-  // Add mean line note
   const note=document.createElement('div');
   note.style.cssText='margin-top:14px;font-size:10px;color:var(--muted);line-height:1.7;';
   note.innerHTML=`Mean <span style="color:var(--accent)">${mfd.toFixed(3)}s</span> &nbsp;·&nbsp; Median <span style="color:var(--accent)">${mfdMedian.toFixed(3)}s</span> &nbsp;·&nbsp; SD <span style="color:var(--accent)">${stddev(fixDurations).toFixed(3)}s</span>`;
   fixDistEl.appendChild(note);
 
   // ── 2. Spatial entropy + density map ──────────────────
-  // Grid-based entropy: divide screen into NxN cells, compute Shannon entropy of fixation distribution
   const ENT_N=8;
   const cellCounts=new Float32Array(ENT_N*ENT_N);
   for(const p of scanpath){
@@ -378,13 +359,12 @@ function analyze(session){
   for(let i=0;i<cellCounts.length;i++){
     if(cellCounts[i]>0){const p=cellCounts[i]/totalFix;entropy-=p*Math.log2(p);}
   }
-  const maxEntropy=Math.log2(ENT_N*ENT_N); // 6 bits for 8x8
+  const maxEntropy=Math.log2(ENT_N*ENT_N);
   const normEntropy=entropy/maxEntropy;
 
   document.getElementById('valEnt').innerHTML=entropy.toFixed(2)+'<span class="stat-unit">bits</span>';
   document.getElementById('subEnt').textContent=`${(normEntropy*100).toFixed(0)}% of max (${maxEntropy.toFixed(1)} bits) · ${ENT_N}×${ENT_N} grid`;
 
-  // Draw density canvas
   const dc=document.getElementById('densityCanvas');
   const dpr=window.devicePixelRatio||1;
   const dcW=dc.parentElement.clientWidth-72;
@@ -395,7 +375,6 @@ function analyze(session){
   const isLight=document.body.classList.contains('light');
   drawDensityMap(dctx,dcW,200,cellCounts,ENT_N,scanpath,srcW,srcH,isLight);
 
-  // Entropy detail
   const entDetail=document.getElementById('entropyDetail');
   const entPct=(normEntropy*100).toFixed(0);
   entDetail.innerHTML=`
@@ -410,14 +389,13 @@ function analyze(session){
       </div>
       <div style="font-size:10px;color:var(--muted);white-space:nowrap;">${entPct}% dispersal</div>
     </div>
-    <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.6;" id="entInterpret">
-    </div>`;
-  const entMsg = normEntropy<0.33
-    ? 'Highly <span style="color:var(--accent2)">focused</span> gaze — most attention in a few regions.'
-    : normEntropy<0.66
-    ? '<span style="color:var(--accent2)">Moderately distributed</span> gaze across the stimulus.'
-    : 'Highly <span style="color:var(--accent2)">dispersed</span> gaze — attention spread broadly across the screen.';
-  document.getElementById('entInterpret').innerHTML = entMsg;
+    <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.6;" id="entInterpret"></div>`;
+  const entMsg=normEntropy<0.33
+    ?'Highly <span style="color:var(--accent2)">focused</span> gaze — most attention in a few regions.'
+    :normEntropy<0.66
+    ?'<span style="color:var(--accent2)">Moderately distributed</span> gaze across the stimulus.'
+    :'Highly <span style="color:var(--accent2)">dispersed</span> gaze — attention spread broadly across the screen.';
+  document.getElementById('entInterpret').innerHTML=entMsg;
 
   // ── 3. Saccade amplitudes ──────────────────────────────
   const saccades=[];
@@ -426,7 +404,7 @@ function analyze(session){
     const dx=b.x_px-a.x_px,dy=b.y_px-a.y_px;
     const amp=Math.sqrt(dx*dx+dy*dy);
     const angle=Math.atan2(dy,dx)*(180/Math.PI);
-    saccades.push({amp, angle, dx, dy, t_ms: b.t_ms});
+    saccades.push({amp,angle,dx,dy,t_ms:b.t_ms});
   }
   const amps=saccades.map(s=>s.amp);
   const meanAmp=amps.length?amps.reduce((a,b)=>a+b,0)/amps.length:0;
@@ -436,16 +414,14 @@ function analyze(session){
   document.getElementById('valSac').innerHTML=meanAmp.toFixed(0)+'<span class="stat-unit">px</span>';
   document.getElementById('subSac').textContent=`median ${medAmp.toFixed(0)}px · max ${maxAmp.toFixed(0)}px · n=${saccades.length}`;
 
-  // Saccade temporal chart
   const sc=document.getElementById('saccadeCanvas');
   const scW=sc.parentElement.clientWidth-72;
   sc.width=scW*dpr; sc.height=160*dpr;
   sc.style.width=scW+'px'; sc.style.height='160px';
   const sctx=sc.getContext('2d');
   sctx.setTransform(dpr,0,0,dpr,0,0);
-  drawSaccadeTemporal(sctx, scW, 160, saccades, maxT, isLight);
+  drawSaccadeTemporal(sctx,scW,160,saccades,maxT,isLight);
 
-  // Saccade stats
   const sacStats=document.getElementById('saccadeStats');
   const horizCount=saccades.filter(s=>Math.abs(s.dx)>Math.abs(s.dy)).length;
   const vertCount=saccades.length-horizCount;
@@ -462,29 +438,27 @@ function analyze(session){
       Total &nbsp;<span style="color:var(--accent3)">${saccades.length}</span>
     </div>`;
 
-  // ── 4. Fixation density summary ────────────────────────
+  // ── 4. Fixation count summary ──────────────────────────
   document.getElementById('valFix').textContent=scanpath.length;
   const fixRate=maxT>0?(scanpath.length/(maxT/1000)).toFixed(2):0;
   document.getElementById('subFix').textContent=`${fixRate} fixations/sec · ${validSamples.length} valid raw samples`;
 
   // Color dwell analysis
-  drawColorDwellAnalysis(scanpath, validSamples, maxT, srcW, srcH, isLight, dpr);
+  drawColorDwellAnalysis(scanpath,validSamples,maxT,srcW,srcH,isLight,dpr);
 }
 
 // ── Drawing helpers ────────────────────────────────────────
 
 function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH,isLight){
-  const gridCol=isLight?'rgba(26,24,20,0.08)'  :'rgba(255,255,255,0.05)';
+  const gridCol=isLight?'rgba(26,24,20,0.08)':'rgba(255,255,255,0.05)';
   const borderCol=isLight?'rgba(26,24,20,0.12)':'rgba(255,255,255,0.08)';
-  const pathCol=isLight?'rgba(26,24,20,0.22)'  :'rgba(255,255,255,0.25)';
+  const pathCol=isLight?'rgba(26,24,20,0.22)':'rgba(255,255,255,0.25)';
   const cw=W/N,ch=H/N;
   const maxC=Math.max(...counts,1);
-  // cells
   for(let cy=0;cy<N;cy++){
     for(let cx=0;cx<N;cx++){
       const v=counts[cy*N+cx]/maxC;
       if(v<0.01)continue;
-      // color ramp: dark → accent2
       const r=Math.round(29+(100-29)*v);
       const g=Math.round(59+(184-59)*v);
       const b=Math.round(122+(240-122)*v);
@@ -492,16 +466,13 @@ function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH,isLight){
       ctx.fillRect(cx*cw,cy*ch,cw,ch);
     }
   }
-  // grid lines
   ctx.strokeStyle=gridCol;ctx.lineWidth=0.5;
   for(let i=1;i<N;i++){
     ctx.beginPath();ctx.moveTo(i*cw,0);ctx.lineTo(i*cw,H);ctx.stroke();
     ctx.beginPath();ctx.moveTo(0,i*ch);ctx.lineTo(W,i*ch);ctx.stroke();
   }
-  // border
   ctx.strokeStyle=borderCol;ctx.lineWidth=1;
   ctx.strokeRect(0,0,W,H);
-  // scanpath overlay
   if(scanpath.length>=2){
     ctx.save();ctx.strokeStyle=pathCol;ctx.lineWidth=0.8;ctx.setLineDash([2,3]);
     ctx.beginPath();
@@ -511,7 +482,6 @@ function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH,isLight){
     });
     ctx.stroke();ctx.setLineDash([]);ctx.restore();
   }
-  // fixation dots
   for(const p of scanpath){
     const x=(p.x_px/srcW)*W,y=(p.y_px/srcH)*H;
     ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);
@@ -519,341 +489,271 @@ function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH,isLight){
   }
 }
 
-function drawHistogram(ctx,W,H,values,isLight,nBins){
-  if(!values.length)return;
-  const minV=0,maxV=Math.max(...values)*1.05;
-  const binW=(maxV-minV)/nBins;
-  const bins=new Array(nBins).fill(0);
-  for(const v of values){
-    const bi=Math.min(nBins-1,Math.floor((v-minV)/binW));
-    bins[bi]++;
-  }
-  const maxB=Math.max(...bins,1);
-
-  // Layout zones: topZone for mean label, bottomZone for axis labels
-  const topZone=20, bottomZone=18;
-  const chartH=H-topZone-bottomZone;
-  const baseline=topZone+chartH;
-  const barW=(W-2)/nBins;
-
-  const axisCol=isLight?'rgba(26,24,20,0.10)':'rgba(255,255,255,0.08)';
+function drawSaccadeTemporal(ctx,W,H,saccades,maxT,isLight){
+  if(!saccades.length)return;
+  const axisCol =isLight?'rgba(26,24,20,0.10)':'rgba(255,255,255,0.08)';
+  const gridCol =isLight?'rgba(26,24,20,0.05)':'rgba(255,255,255,0.04)';
   const labelCol=isLight?'rgba(26,24,20,0.32)':'rgba(255,255,255,0.28)';
-  const barBase=isLight?[200,96,42]:[210,130,80];
+  const [br,bg,bb]=isLight?[179,106,43]:[210,130,80];
 
-  // baseline
+  const topZone=16,botZone=16;
+  const chartH=H-topZone-botZone;
+  const baseline=topZone+chartH;
+  const maxAmp=Math.max(...saccades.map(s=>s.amp));
+  const meanAmp=saccades.reduce((a,s)=>a+s.amp,0)/saccades.length;
+
+  ctx.fillStyle=isLight?'rgba(0,0,0,0.015)':'rgba(255,255,255,0.015)';
+  ctx.fillRect(0,topZone,W,chartH);
+
+  ctx.strokeStyle=gridCol;ctx.lineWidth=0.5;ctx.setLineDash([3,4]);
+  for(const pct of[0.25,0.5,0.75]){
+    const y=topZone+chartH*(1-pct);
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
   ctx.strokeStyle=axisCol;ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
 
-  // bars
-  for(let i=0;i<nBins;i++){
-    const bh=(bins[i]/maxB)*chartH;
-    if(bh<0.5)continue;
-    const x=i*barW+1, y=baseline-bh;
-    const alpha=0.20+0.75*(bins[i]/maxB);
-    ctx.fillStyle=`rgba(${barBase[0]},${barBase[1]},${barBase[2]},${alpha})`;
-    ctx.fillRect(x, y, Math.max(1,barW-1), bh);
-  }
-
-  // mean line + label (inside topZone, above bars)
-  const meanV=values.reduce((a,b)=>a+b,0)/values.length;
-  const mx=Math.min(W-2, (meanV/maxV)*W);
-  ctx.strokeStyle='rgba(200,96,42,0.55)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
-  ctx.beginPath();ctx.moveTo(mx,topZone);ctx.lineTo(mx,baseline);ctx.stroke();
+  const meanY=topZone+chartH*(1-meanAmp/maxAmp);
+  ctx.strokeStyle=`rgba(${br},${bg},${bb},0.4)`;ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(0,meanY);ctx.lineTo(W,meanY);ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle='rgba(200,96,42,0.75)';ctx.font='9px "DM Mono",monospace';
-  ctx.textAlign='center';ctx.textBaseline='bottom';
-  ctx.fillText('μ='+Math.round(meanV)+'px', mx, topZone-1);
+  ctx.fillStyle=`rgba(${br},${bg},${bb},0.55)`;
+  ctx.font='8px "DM Mono",monospace';ctx.textAlign='left';ctx.textBaseline='bottom';
+  ctx.fillText('μ '+Math.round(meanAmp)+'px',2,meanY-1);
 
-  // axis labels inside bottomZone
-  ctx.fillStyle=labelCol;ctx.font='9px "DM Mono",monospace';
-  ctx.textAlign='left';ctx.textBaseline='top';
-  ctx.fillText('0px', 2, baseline+4);
-  ctx.textAlign='right';
-  ctx.fillText(Math.round(maxV)+'px', W-2, baseline+4);
-}
-
-function drawSaccadeTemporal(ctx, W, H, saccades, maxT, isLight) {
-  if (!saccades.length) return;
-
-  const axisCol  = isLight ? 'rgba(26,24,20,0.10)' : 'rgba(255,255,255,0.08)';
-  const gridCol  = isLight ? 'rgba(26,24,20,0.05)' : 'rgba(255,255,255,0.04)';
-  const labelCol = isLight ? 'rgba(26,24,20,0.32)' : 'rgba(255,255,255,0.28)';
-  const [br, bg, bb] = isLight ? [179, 106, 43] : [210, 130, 80]; // accent3
-
-  const topZone = 16, botZone = 16;
-  const chartH  = H - topZone - botZone;
-  const baseline = topZone + chartH;
-
-  const maxAmp = Math.max(...saccades.map(s => s.amp));
-  const meanAmp = saccades.reduce((a, s) => a + s.amp, 0) / saccades.length;
-
-  // Background
-  ctx.fillStyle = isLight ? 'rgba(0,0,0,0.015)' : 'rgba(255,255,255,0.015)';
-  ctx.fillRect(0, topZone, W, chartH);
-
-  // Horizontal grid lines at 25%, 50%, 75%
-  ctx.strokeStyle = gridCol; ctx.lineWidth = 0.5; ctx.setLineDash([3, 4]);
-  for (const pct of [0.25, 0.5, 0.75]) {
-    const y = topZone + chartH * (1 - pct);
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-  }
-  ctx.setLineDash([]);
-
-  // Baseline
-  ctx.strokeStyle = axisCol; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, baseline); ctx.lineTo(W, baseline); ctx.stroke();
-
-  // Mean line (dashed, horizontal)
-  const meanY = topZone + chartH * (1 - meanAmp / maxAmp);
-  ctx.strokeStyle = `rgba(${br},${bg},${bb},0.4)`; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-  ctx.beginPath(); ctx.moveTo(0, meanY); ctx.lineTo(W, meanY); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = `rgba(${br},${bg},${bb},0.55)`;
-  ctx.font = '8px "DM Mono",monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-  ctx.fillText('μ ' + Math.round(meanAmp) + 'px', 2, meanY - 1);
-
-  // Spikes — each saccade is a vertical line from baseline up, width proportional to amp
-  // Color: low amp = muted, high amp = vivid accent3
-  for (const s of saccades) {
-    const x  = (s.t_ms / maxT) * W;
-    const h  = (s.amp / maxAmp) * chartH;
-    const y  = baseline - h;
-    const ratio = s.amp / maxAmp;
-    const alpha = 0.2 + ratio * 0.75;
-    const spikeW = Math.max(1.5, 2.5 * ratio);
-    ctx.strokeStyle = `rgba(${br},${bg},${bb},${alpha})`;
-    ctx.lineWidth = spikeW;
-    ctx.beginPath(); ctx.moveTo(x, baseline); ctx.lineTo(x, y); ctx.stroke();
-    // dot at peak of each spike
-    ctx.fillStyle = `rgba(${br},${bg},${bb},${alpha})`;
-    ctx.beginPath(); ctx.arc(x, y, spikeW * 0.8, 0, Math.PI * 2); ctx.fill();
+  for(const s of saccades){
+    const x=(s.t_ms/maxT)*W;
+    const h=(s.amp/maxAmp)*chartH;
+    const y=baseline-h;
+    const ratio=s.amp/maxAmp;
+    const alpha=0.2+ratio*0.75;
+    const spikeW=Math.max(1.5,2.5*ratio);
+    ctx.strokeStyle=`rgba(${br},${bg},${bb},${alpha})`;
+    ctx.lineWidth=spikeW;
+    ctx.beginPath();ctx.moveTo(x,baseline);ctx.lineTo(x,y);ctx.stroke();
+    ctx.fillStyle=`rgba(${br},${bg},${bb},${alpha})`;
+    ctx.beginPath();ctx.arc(x,y,spikeW*0.8,0,Math.PI*2);ctx.fill();
   }
 
-  // Time axis labels
-  ctx.fillStyle = labelCol; ctx.font = '8px "DM Mono",monospace';
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
-  for (const t of ticks) {
-    const x = t * W;
-    ctx.strokeStyle = axisCol; ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(x, baseline); ctx.lineTo(x, baseline + 3); ctx.stroke();
-    ctx.textAlign = t === 0 ? 'left' : t === 1 ? 'right' : 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText((t * maxT / 1000).toFixed(0) + 's', x, baseline + 4);
+  ctx.fillStyle=labelCol;ctx.font='8px "DM Mono",monospace';
+  const ticks=[0,0.25,0.5,0.75,1];
+  for(const t of ticks){
+    const x=t*W;
+    ctx.strokeStyle=axisCol;ctx.lineWidth=0.5;
+    ctx.beginPath();ctx.moveTo(x,baseline);ctx.lineTo(x,baseline+3);ctx.stroke();
+    ctx.textAlign=t===0?'left':t===1?'right':'center';
+    ctx.textBaseline='top';
+    ctx.fillText((t*maxT/1000).toFixed(0)+'s',x,baseline+4);
   }
-
-  // Y axis labels
-  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  ctx.fillText(Math.round(maxAmp) + 'px', W - 1, topZone + 4);
-  ctx.fillText('0', W - 1, baseline - 4);
+  ctx.textAlign='right';ctx.textBaseline='middle';
+  ctx.fillText(Math.round(maxAmp)+'px',W-1,topZone+4);
+  ctx.fillText('0',W-1,baseline-4);
 }
 
 // ── Color Dwell Analysis ───────────────────────────────────
 
-// Holds the stimulus image element if loaded (from session or manual upload)
-let _stimImg = null;
-let _stimImgReady = false;
+let _stimImg=null;
+let _stimImgReady=false;
 
-// Called when a session loads — try to pull stimulus_image from session data
-function tryLoadStimulusFromSession(session) {
-  if (session.stimulus_image) {
-    const img = new Image();
-    img.onload = () => { _stimImg = img; _stimImgReady = true; if (currentSession) analyze(currentSession); };
-    img.onerror = () => { _stimImg = null; _stimImgReady = false; };
-    img.src = session.stimulus_image;
+function tryLoadStimulusFromSession(session){
+  if(session.stimulus_image){
+    const img=new Image();
+    img.onload=()=>{_stimImg=img;_stimImgReady=true;if(currentSession)analyze(currentSession);};
+    img.onerror=()=>{_stimImg=null;_stimImgReady=false;};
+    img.src=session.stimulus_image;
   } else {
-    _stimImg = null;
-    _stimImgReady = false;
+    _stimImg=null;_stimImgReady=false;
   }
 }
 
 // stimFileIn upload removed — stimulus image is always embedded in .wgz
 
-// Default gradient color stops (matches tracker)
-const GRAD_STOPS = [
-  { pos: 0,    r: 11,  g: 11,  b: 26  },
-  { pos: 0.25, r: 29,  g: 59,  b: 122 },
-  { pos: 0.5,  r: 43,  g: 179, b: 163 },
-  { pos: 0.75, r: 244, g: 211, b: 94  },
-  { pos: 1,    r: 249, g: 87,  b: 56  },
+const GRAD_STOPS=[
+  {pos:0,   r:11, g:11, b:26 },
+  {pos:0.25,r:29, g:59, b:122},
+  {pos:0.5, r:43, g:179,b:163},
+  {pos:0.75,r:244,g:211,b:94 },
+  {pos:1,   r:249,g:87, b:56 },
 ];
 
-function gradientColorAt(xNorm) {
-  const t = Math.max(0, Math.min(1, xNorm));
-  let lo = GRAD_STOPS[0], hi = GRAD_STOPS[GRAD_STOPS.length - 1];
-  for (let i = 0; i < GRAD_STOPS.length - 1; i++) {
-    if (t >= GRAD_STOPS[i].pos && t <= GRAD_STOPS[i+1].pos) {
-      lo = GRAD_STOPS[i]; hi = GRAD_STOPS[i+1]; break;
-    }
+function gradientColorAt(xNorm){
+  const t=Math.max(0,Math.min(1,xNorm));
+  let lo=GRAD_STOPS[0],hi=GRAD_STOPS[GRAD_STOPS.length-1];
+  for(let i=0;i<GRAD_STOPS.length-1;i++){
+    if(t>=GRAD_STOPS[i].pos&&t<=GRAD_STOPS[i+1].pos){lo=GRAD_STOPS[i];hi=GRAD_STOPS[i+1];break;}
   }
-  const span = hi.pos - lo.pos || 1;
-  const f = (t - lo.pos) / span;
-  return [
-    Math.round(lo.r + (hi.r - lo.r) * f),
-    Math.round(lo.g + (hi.g - lo.g) * f),
-    Math.round(lo.b + (hi.b - lo.b) * f)
-  ];
+  const span=hi.pos-lo.pos||1;
+  const f=(t-lo.pos)/span;
+  return[Math.round(lo.r+(hi.r-lo.r)*f),Math.round(lo.g+(hi.g-lo.g)*f),Math.round(lo.b+(hi.b-lo.b)*f)];
 }
 
-function getPixelColorFromImage(img, xNorm, yNorm) {
-  // Sample from the offscreen canvas representation of the stimulus
-  if (!_colorSampleCanvas) {
-    _colorSampleCanvas = document.createElement('canvas');
-    _colorSampleCanvas.width = 200;
-    _colorSampleCanvas.height = 1;
+let _colorSampleCanvas=null;
+function getPixelColorFromImage(img,xNorm,yNorm){
+  if(!_colorSampleCanvas){
+    _colorSampleCanvas=document.createElement('canvas');
+    _colorSampleCanvas.width=200;_colorSampleCanvas.height=1;
   }
-  const W = _colorSampleCanvas.width;
-  const H = _colorSampleCanvas.height;
-  if (_colorSampleCanvas._srcImg !== img) {
-    _colorSampleCanvas.height = Math.max(1, Math.round(img.height * (W / img.width)));
-    const sctx = _colorSampleCanvas.getContext('2d');
-    sctx.drawImage(img, 0, 0, W, _colorSampleCanvas.height);
-    _colorSampleCanvas._srcImg = img;
+  const W=_colorSampleCanvas.width;
+  if(_colorSampleCanvas._srcImg!==img){
+    _colorSampleCanvas.height=Math.max(1,Math.round(img.height*(W/img.width)));
+    const sctx=_colorSampleCanvas.getContext('2d');
+    sctx.drawImage(img,0,0,W,_colorSampleCanvas.height);
+    _colorSampleCanvas._srcImg=img;
   }
-  const px = Math.min(_colorSampleCanvas.width - 1, Math.max(0, Math.round(xNorm * (_colorSampleCanvas.width - 1))));
-  const py = Math.min(_colorSampleCanvas.height - 1, Math.max(0, Math.round(yNorm * (_colorSampleCanvas.height - 1))));
-  const sctx = _colorSampleCanvas.getContext('2d');
-  const d = sctx.getImageData(px, py, 1, 1).data;
-  return [d[0], d[1], d[2]];
+  const px=Math.min(_colorSampleCanvas.width-1,Math.max(0,Math.round(xNorm*(_colorSampleCanvas.width-1))));
+  const py=Math.min(_colorSampleCanvas.height-1,Math.max(0,Math.round(yNorm*(_colorSampleCanvas.height-1))));
+  const sctx=_colorSampleCanvas.getContext('2d');
+  const d=sctx.getImageData(px,py,1,1).data;
+  return[d[0],d[1],d[2]];
 }
 
-let _colorSampleCanvas = null;
-
-function drawColorDwellAnalysis(scanpath, validSamples, maxT, srcW, srcH, isLight, dpr) {
-  const muted  = isLight ? 'rgba(26,24,20,0.32)' : 'rgba(255,255,255,0.28)';
-  const border = isLight ? 'rgba(26,24,20,0.12)'  : 'rgba(255,255,255,0.08)';
-  const bg     = isLight ? 'rgba(26,24,20,0.04)'  : 'rgba(255,255,255,0.03)';
+function drawColorDwellAnalysis(scanpath,validSamples,maxT,srcW,srcH,isLight,dpr){
+  const muted =isLight?'rgba(26,24,20,0.32)':'rgba(255,255,255,0.28)';
+  const border=isLight?'rgba(26,24,20,0.12)':'rgba(255,255,255,0.08)';
+  const bg    =isLight?'rgba(26,24,20,0.04)':'rgba(255,255,255,0.03)';
 
   // stimulus image always comes from session embed
-
-  // Helper: get RGB for a normalised (xNorm, yNorm) position on the stimulus
-  function colorAt(xNorm, yNorm) {
-    if (_stimImgReady && _stimImg) return getPixelColorFromImage(_stimImg, xNorm, yNorm);
+  function colorAt(xNorm,yNorm){
+    if(_stimImgReady&&_stimImg)return getPixelColorFromImage(_stimImg,xNorm,yNorm);
     return gradientColorAt(xNorm);
   }
 
-  // Build per-fixation data: { t_ms, dwell_ms, rgb }
-  const fixations = [];
-  for (let i = 0; i < scanpath.length; i++) {
-    const p = scanpath[i];
-    if (typeof p.x_px !== 'number') continue;
-    const nextT  = i < scanpath.length - 1 ? scanpath[i+1].t_ms : maxT;
-    const dwellMs = Math.max(0, nextT - p.t_ms);
-    const xNorm  = Math.max(0, Math.min(1, p.x_px / srcW));
-    const yNorm  = Math.max(0, Math.min(1, p.y_px / srcH));
-    fixations.push({ t_ms: p.t_ms, dwellMs, rgb: colorAt(xNorm, yNorm), xNorm });
+  const fixations=[];
+  for(let i=0;i<scanpath.length;i++){
+    const p=scanpath[i];
+    if(typeof p.x_px!=='number')continue;
+    const nextT=i<scanpath.length-1?scanpath[i+1].t_ms:maxT;
+    const dwellMs=Math.max(0,nextT-p.t_ms);
+    const xNorm=Math.max(0,Math.min(1,p.x_px/srcW));
+    const yNorm=Math.max(0,Math.min(1,p.y_px/srcH));
+    fixations.push({t_ms:p.t_ms,dwellMs,rgb:colorAt(xNorm,yNorm),xNorm});
   }
 
-  // ── 1. Fixation timeline: 30s bar, each fixation = colored block ──
-  const tlC   = document.getElementById('colorTimelineCanvas');
-  const tlW   = tlC.parentElement.clientWidth - 72;
-  const TL_H  = 52;
-  tlC.width   = tlW * dpr; tlC.height = TL_H * dpr;
-  tlC.style.width = tlW + 'px'; tlC.style.height = TL_H + 'px';
-  const tc = tlC.getContext('2d');
-  tc.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // ── 1. Fixation timeline: spikes, height = dwell, color = fixation color ──
+  const tlC =document.getElementById('colorTimelineCanvas');
+  const tlW =tlC.parentElement.clientWidth-72;
+  const TL_H=110;
+  tlC.width =tlW*dpr;tlC.height=TL_H*dpr;
+  tlC.style.width=tlW+'px';tlC.style.height=TL_H+'px';
+  const tc=tlC.getContext('2d');
+  tc.setTransform(dpr,0,0,dpr,0,0);
 
-  const TICK_H  = 32;  // height of each fixation block
-  const LABEL_H = 14;  // bottom axis area
-  const BAR_Y   = TL_H - TICK_H - LABEL_H;
+  const TL_TOP   =8;
+  const TL_BOT   =16;
+  const TL_STRIP =10;
+  const TL_GAP   =4;
+  const spikeAreaH=TL_H-TL_TOP-TL_BOT-TL_STRIP-TL_GAP;
+  const stripY   =TL_TOP+spikeAreaH+TL_GAP;
+  const baseline =stripY;
 
-  // Background track
-  tc.fillStyle = bg;
-  tc.fillRect(0, BAR_Y, tlW, TICK_H);
-  tc.strokeStyle = border; tc.lineWidth = 1;
-  tc.strokeRect(0, BAR_Y, tlW, TICK_H);
+  const maxDwellMs=Math.max(...fixations.map(f=>f.dwellMs),1);
 
-  // Draw each fixation as a colored segment spanning its dwell time
-  for (const f of fixations) {
-    const x1 = (f.t_ms / maxT) * tlW;
-    const x2 = Math.min(tlW, ((f.t_ms + f.dwellMs) / maxT) * tlW);
-    const w  = Math.max(2, x2 - x1);
-    const [r, g, b] = f.rgb;
-    tc.fillStyle = `rgb(${r},${g},${b})`;
-    tc.fillRect(x1, BAR_Y, w, TICK_H);
-    // thin white separator
-    tc.fillStyle = isLight ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
-    tc.fillRect(x1, BAR_Y, 1, TICK_H);
+  tc.fillStyle=bg;
+  tc.fillRect(0,TL_TOP,tlW,spikeAreaH);
+
+  tc.strokeStyle=border;tc.lineWidth=0.5;tc.setLineDash([2,4]);
+  for(const pct of[0.25,0.5,0.75]){
+    const y=baseline-pct*spikeAreaH;
+    tc.beginPath();tc.moveTo(0,y);tc.lineTo(tlW,y);tc.stroke();
+  }
+  tc.setLineDash([]);
+
+  for(const f of fixations){
+    const x=(f.t_ms/maxT)*tlW;
+    const h=(f.dwellMs/maxDwellMs)*spikeAreaH;
+    const[r,g,b]=f.rgb;
+    const ratio=f.dwellMs/maxDwellMs;
+    tc.fillStyle=`rgba(${r},${g},${b},${0.45+ratio*0.5})`;
+    tc.fillRect(x-2,baseline-h,4,h);
+    tc.fillStyle=`rgba(${r},${g},${b},0.95)`;
+    tc.beginPath();tc.arc(x,baseline-h,2.5,0,Math.PI*2);tc.fill();
   }
 
-  // Time axis ticks: 0s, 10s, 20s, 30s
-  tc.fillStyle  = muted;
-  tc.font       = '8px "DM Mono",monospace';
-  tc.textBaseline = 'top';
-  const tickMs  = [0, 10000, 20000, maxT];
-  for (const t of tickMs) {
-    const x = (t / maxT) * tlW;
-    tc.strokeStyle = border; tc.lineWidth = 0.5;
-    tc.beginPath(); tc.moveTo(x, BAR_Y + TICK_H); tc.lineTo(x, BAR_Y + TICK_H + 4); tc.stroke();
-    tc.textAlign = t === 0 ? 'left' : t === maxT ? 'right' : 'center';
-    tc.fillText((t / 1000).toFixed(0) + 's', x, BAR_Y + TICK_H + 4);
+  tc.strokeStyle=border;tc.lineWidth=1;
+  tc.beginPath();tc.moveTo(0,baseline);tc.lineTo(tlW,baseline);tc.stroke();
+
+  for(const f of fixations){
+    const x1=(f.t_ms/maxT)*tlW;
+    const x2=Math.min(tlW,((f.t_ms+f.dwellMs)/maxT)*tlW);
+    const[r,g,b]=f.rgb;
+    tc.fillStyle=`rgb(${r},${g},${b})`;
+    tc.fillRect(x1,stripY,Math.max(2,x2-x1),TL_STRIP);
+  }
+  tc.strokeStyle=border;tc.lineWidth=1;
+  tc.strokeRect(0,stripY,tlW,TL_STRIP);
+
+  tc.fillStyle=muted;tc.font='8px "DM Mono",monospace';
+  tc.textAlign='right';tc.textBaseline='top';
+  tc.fillText(Math.round(maxDwellMs/100)/10+'s',tlW,TL_TOP+1);
+  tc.textBaseline='bottom';
+  tc.fillText('0',tlW,baseline-1);
+
+  const tickMs=[0,10000,20000,maxT];
+  for(const t of tickMs){
+    const x=(t/maxT)*tlW;
+    tc.strokeStyle=border;tc.lineWidth=0.5;
+    tc.beginPath();tc.moveTo(x,stripY+TL_STRIP);tc.lineTo(x,stripY+TL_STRIP+3);tc.stroke();
+    tc.fillStyle=muted;
+    tc.textAlign=t===0?'left':t===maxT?'right':'center';
+    tc.textBaseline='top';
+    tc.fillText((t/1000).toFixed(0)+'s',x,stripY+TL_STRIP+4);
   }
 
-  // ── 2. Total dwell per color — horizontal bar chart, sorted by dwell ──
-  // Cluster fixations into N color buckets by xNorm position
-  const N_BINS = 16;
-  const bins = Array.from({length: N_BINS}, (_, i) => {
-    const xNorm = (i + 0.5) / N_BINS;
-    return { dwellMs: 0, rgb: colorAt(xNorm, 0.5), xNorm };
+  // ── 2. Total dwell — compact two-row color strip ──
+  const N_BINS=20;
+  const bins=Array.from({length:N_BINS},(_,i)=>{
+    const xNorm=(i+0.5)/N_BINS;
+    return{dwellMs:0,rgb:colorAt(xNorm,0.5),xNorm};
   });
-  for (const f of fixations) {
-    const idx = Math.min(N_BINS - 1, Math.floor(f.xNorm * N_BINS));
-    bins[idx].dwellMs += f.dwellMs;
+  for(const f of fixations){
+    const idx=Math.min(N_BINS-1,Math.floor(f.xNorm*N_BINS));
+    bins[idx].dwellMs+=f.dwellMs;
   }
+  const totalDwell=fixations.reduce((a,f)=>a+f.dwellMs,0);
 
-  // Sort by dwell descending for a ranked bar chart
-  const sorted = [...bins].filter(b => b.dwellMs > 0).sort((a, b) => b.dwellMs - a.dwellMs);
-  // Show all fixated color bins (not just top 8)
-  const topN   = sorted;
-  const maxDwell = topN[0]?.dwellMs || 1;
+  const dwC=document.getElementById('colorDwellCanvas');
+  const dcW=dwC.parentElement.clientWidth-72;
+  const DC_H=28;
+  dwC.width=dcW*dpr;dwC.height=DC_H*dpr;
+  dwC.style.width=dcW+'px';dwC.style.height=DC_H+'px';
+  const dc=dwC.getContext('2d');
+  dc.setTransform(dpr,0,0,dpr,0,0);
 
-  const dwC  = document.getElementById('colorDwellCanvas');
-  const dcW  = dwC.parentElement.clientWidth - 72;
-  const dc = dwC.getContext('2d');
+  const STRIP_TOP_H=14;
+  const STRIP_BOT_H=10;
+  const STRIP_GAP=2;
 
-  const ROW_H    = 14;
-  const DC_H     = Math.max(40, topN.length * ROW_H + 4);
-  dwC.width  = dcW * dpr; dwC.height = DC_H * dpr;
-  dwC.style.width = dcW + 'px'; dwC.style.height = DC_H + 'px';
-  dc.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  const SWATCH_W = 14;
-  const BAR_X    = SWATCH_W + 6;
-  const BAR_MAX  = dcW - BAR_X - 36;
-
-  for (let i = 0; i < topN.length; i++) {
-    const b   = topN[i];
-    const [r, g, b2] = b.rgb;
-    const y   = i * ROW_H + 2;
-    const barW = Math.round((b.dwellMs / maxDwell) * BAR_MAX);
-
-    // color swatch
-    dc.fillStyle = `rgb(${r},${g},${b2})`;
-    dc.fillRect(0, y + 1, SWATCH_W, ROW_H - 2);
-
-    // bar
-    dc.fillStyle = `rgba(${r},${g},${b2},${0.35 + 0.55 * (b.dwellMs / maxDwell)})`;
-    dc.fillRect(BAR_X, y + 2, barW, ROW_H - 4);
-
-    // dwell label
-    dc.fillStyle  = muted;
-    dc.font       = '8px "DM Mono",monospace';
-    dc.textAlign  = 'left';
-    dc.textBaseline = 'middle';
-    dc.fillText((b.dwellMs / 1000).toFixed(2) + 's', BAR_X + barW + 4, y + ROW_H / 2);
+  let cursorX=0;
+  for(const b of bins){
+    if(b.dwellMs===0)continue;
+    const w=Math.max(1,(b.dwellMs/totalDwell)*dcW);
+    const[r,g,b2]=b.rgb;
+    dc.fillStyle=`rgb(${r},${g},${b2})`;
+    dc.fillRect(cursorX,0,w,STRIP_TOP_H);
+    dc.fillStyle=isLight?'rgba(255,255,255,0.3)':'rgba(0,0,0,0.2)';
+    dc.fillRect(cursorX,0,1,STRIP_TOP_H);
+    cursorX+=w;
   }
+  const swatchW=dcW/N_BINS;
+  for(let i=0;i<N_BINS;i++){
+    const b=bins[i];
+    const[r,g,b2]=b.rgb;
+    dc.fillStyle=`rgba(${r},${g},${b2},${b.dwellMs>0?1.0:0.15})`;
+    dc.fillRect(i*swatchW,STRIP_TOP_H+STRIP_GAP,swatchW,STRIP_BOT_H);
+  }
+  dc.strokeStyle=border;dc.lineWidth=1;
+  dc.strokeRect(0,0,dcW,STRIP_TOP_H);
+  dc.strokeRect(0,STRIP_TOP_H+STRIP_GAP,dcW,STRIP_BOT_H);
 
   // ── Stats summary ──
-  const totalDwell = fixations.reduce((a, f) => a + f.dwellMs, 0);
-  const dominant   = topN[0];
-  const statsEl    = document.getElementById('colorDwellStats');
-
-  if (!dominant) {
-    statsEl.innerHTML = '<div style="font-size:10px;color:var(--muted);">No fixation data.</div>';
-    return;
-  }
-  const [dr, dg, db2] = dominant.rgb;
-  const domPct = ((dominant.dwellMs / totalDwell) * 100).toFixed(0);
-  statsEl.innerHTML = `
+  const dominant=bins.filter(b=>b.dwellMs>0).sort((a,b)=>b.dwellMs-a.dwellMs)[0];
+  const statsEl=document.getElementById('colorDwellStats');
+  if(!dominant){statsEl.innerHTML='<div style="font-size:10px;color:var(--muted);">No fixation data.</div>';return;}
+  const[dr,dg,db2]=dominant.rgb;
+  const domPct=((dominant.dwellMs/totalDwell)*100).toFixed(0);
+  statsEl.innerHTML=`
     <div style="font-size:10px;color:var(--muted);line-height:1.9;">
       Most dwelled color &nbsp;<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:rgb(${dr},${dg},${db2});vertical-align:middle;"></span>
       &nbsp;<span style="color:var(--accent4)">${(dominant.dwellMs/1000).toFixed(2)}s</span> (${domPct}% of total gaze)
@@ -889,53 +789,38 @@ document.getElementById('btnDark').addEventListener('click',()=>{
 });
 
 // ── Export PNG ─────────────────────────────────────────────
-document.getElementById('exportBtn').addEventListener('click', async ()=>{
-  const btn = document.getElementById('exportBtn');
-  btn.textContent = '…';
-  btn.disabled = true;
-
-  // Load html2canvas if not already present
-  if (!window.html2canvas) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      s.onload = resolve; s.onerror = reject;
+document.getElementById('exportBtn').addEventListener('click',async()=>{
+  const btn=document.getElementById('exportBtn');
+  btn.textContent='…';btn.disabled=true;
+  if(!window.html2canvas){
+    await new Promise((resolve,reject)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload=resolve;s.onerror=reject;
       document.head.appendChild(s);
     });
   }
-
-  const isLight = document.body.classList.contains('light');
-  const appEl = document.getElementById('app');
-
-  try {
-    const canvas = await html2canvas(appEl, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: isLight ? '#f5f0e8' : '#0a0a0f',
-      logging: false,
-      width: appEl.scrollWidth,
-      height: appEl.scrollHeight,
-      windowWidth: appEl.scrollWidth,
-      windowHeight: appEl.scrollHeight,
+  const isLight=document.body.classList.contains('light');
+  const appEl=document.getElementById('app');
+  try{
+    const canvas=await html2canvas(appEl,{
+      scale:2,useCORS:true,allowTaint:true,
+      backgroundColor:isLight?'#f5f0e8':'#0a0a0f',
+      logging:false,
+      width:appEl.scrollWidth,height:appEl.scrollHeight,
+      windowWidth:appEl.scrollWidth,windowHeight:appEl.scrollHeight,
     });
-
-    canvas.toBlob(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      const pid = document.getElementById('metaPid').textContent.replace(/[^a-zA-Z0-9_-]/g,'') || 'p';
-      const cond = document.getElementById('metaCond').textContent.replace(/[^a-zA-Z0-9_-]/g,'') || 'cond';
-      a.download = `gaze_metrics_${pid}_${cond}.png`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    }, 'image/png');
-  } catch(e) {
-    console.error(e);
-    alert('Export failed: ' + e.message);
-  }
-
-  btn.textContent = '↓ PNG';
-  btn.disabled = false;
+    canvas.toBlob(blob=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      const pid=document.getElementById('metaPid').textContent.replace(/[^a-zA-Z0-9_-]/g,'')||'p';
+      const cond=document.getElementById('metaCond').textContent.replace(/[^a-zA-Z0-9_-]/g,'')||'cond';
+      a.download=`gaze_metrics_${pid}_${cond}.png`;
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+    },'image/png');
+  }catch(e){console.error(e);alert('Export failed: '+e.message);}
+  btn.textContent='↓ PNG';btn.disabled=false;
 });
 </script>
 </body>
