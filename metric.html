@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Gaze Metrics</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0a0a0f;
+  --surface:#111118;
+  --border:rgba(255,255,255,0.07);
+  --text:#e8e6e0;
+  --muted:rgba(232,230,224,0.38);
+  --accent:#c8f064;
+  --accent2:#64b8f0;
+  --accent3:#f09664;
+  --accent4:#b464f0;
+  --red:#f06464;
+}
+html,body{width:100%;min-height:100%;background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;overflow-x:hidden;}
+
+/* ── Drop screen ── */
+#dropScreen{
+  position:fixed;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:32px;z-index:100;
+  background:var(--bg);transition:opacity 400ms ease;
+}
+#dropScreen.gone{opacity:0;pointer-events:none;}
+.drop-title{font-family:'Instrument Serif',serif;font-size:clamp(36px,6vw,72px);font-weight:400;letter-spacing:-0.02em;line-height:1.0;text-align:center;}
+.drop-title em{font-style:italic;color:var(--accent);}
+#dropZone{
+  width:min(480px,88vw);height:200px;
+  border:1px solid rgba(255,255,255,0.14);border-radius:3px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  cursor:pointer;transition:border-color 200ms,background 200ms;
+  background:rgba(255,255,255,0.02);
+}
+#dropZone:hover,#dropZone.over{border-color:var(--accent);background:rgba(200,240,100,0.04);}
+#dropZone .icon{font-size:32px;opacity:0.3;}
+#dropZone p{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.4;text-align:center;line-height:1.8;}
+#dropZone p strong{color:var(--accent);opacity:1;}
+#fileIn{display:none;}
+.drop-sub{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.2;}
+
+/* ── Main layout ── */
+#app{display:none;min-height:100vh;}
+#app.visible{display:block;}
+
+/* Header */
+#header{
+  padding:28px 40px 24px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:baseline;justify-content:space-between;gap:20px;
+  flex-wrap:wrap;
+}
+.header-title{font-family:'Instrument Serif',serif;font-size:22px;font-weight:400;letter-spacing:-0.01em;}
+.header-title em{font-style:italic;color:var(--accent);}
+.header-meta{font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--muted);display:flex;gap:20px;flex-wrap:wrap;align-items:center;}
+.header-meta span{white-space:nowrap;}
+.header-meta .sep{opacity:0.2;}
+#reloadBtn{
+  background:none;border:1px solid var(--border);color:var(--muted);
+  font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.08em;
+  text-transform:uppercase;padding:5px 12px;border-radius:2px;cursor:pointer;
+  transition:border-color 150ms,color 150ms;
+}
+#reloadBtn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Summary row */
+#summary{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  border-bottom:1px solid var(--border);
+}
+.stat-card{
+  padding:28px 32px 24px;
+  border-right:1px solid var(--border);
+  position:relative;overflow:hidden;
+}
+.stat-card:last-child{border-right:none;}
+.stat-accent-bar{position:absolute;top:0;left:0;right:0;height:2px;}
+.stat-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.stat-value{font-family:'Instrument Serif',serif;font-size:clamp(28px,3vw,44px);font-weight:400;line-height:1.0;letter-spacing:-0.02em;}
+.stat-unit{font-size:11px;color:var(--muted);margin-left:4px;font-family:'Space Mono',monospace;}
+.stat-sub{font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5;}
+
+/* Sections */
+#sections{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--border);}
+.section{padding:32px 36px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
+.section:nth-child(even){border-right:none;}
+.section-label{
+  font-size:9px;letter-spacing:0.14em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:20px;display:flex;align-items:center;gap:10px;
+}
+.section-dot{width:6px;height:6px;border-radius:50%;}
+canvas.chart{width:100%;border-radius:2px;display:block;}
+
+/* Distribution bars */
+.dist-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.dist-label{font-size:10px;color:var(--muted);min-width:44px;text-align:right;white-space:nowrap;}
+.dist-bar-wrap{flex:1;height:6px;background:rgba(255,255,255,0.06);border-radius:1px;overflow:hidden;}
+.dist-bar{height:100%;border-radius:1px;transition:width 600ms ease;}
+.dist-val{font-size:10px;color:var(--muted);min-width:40px;text-align:right;}
+
+/* Entropy gauge */
+#entropyGauge{display:flex;align-items:center;gap:24px;margin-top:8px;}
+.entropy-arc-wrap{flex-shrink:0;}
+.entropy-info{flex:1;}
+.entropy-num{font-family:'Instrument Serif',serif;font-size:40px;letter-spacing:-0.02em;line-height:1;}
+.entropy-label{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5;}
+.entropy-scale{display:flex;gap:0;margin-top:14px;border-radius:2px;overflow:hidden;height:4px;}
+.entropy-scale span{flex:1;}
+
+/* Saccade histogram */
+.hist-wrap{position:relative;}
+
+/* Footer */
+#footer{padding:20px 40px;display:flex;justify-content:space-between;align-items:center;opacity:0.3;font-size:10px;letter-spacing:0.08em;}
+
+@media(max-width:700px){
+  #summary{grid-template-columns:1fr 1fr;}
+  #sections{grid-template-columns:1fr;}
+  .section{border-right:none;}
+  #header{padding:20px 20px 16px;}
+  .stat-card{padding:20px;}
+  .section{padding:24px 20px;}
+  #footer{padding:16px 20px;}
+}
+</style>
+</head>
+<body>
+
+<!-- Drop screen -->
+<div id="dropScreen">
+  <div class="drop-title">Gaze <em>Metrics</em></div>
+  <div id="dropZone">
+    <div class="icon">◎</div>
+    <p>Drop a <strong>.wgz</strong> session file here<br>or click to browse</p>
+  </div>
+  <div class="drop-sub">computes fixation · entropy · saccade metrics</div>
+  <input type="file" id="fileIn" accept=".wgz,.json"/>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <div id="header">
+    <div class="header-title">Gaze <em>Metrics</em></div>
+    <div class="header-meta">
+      <span id="metaPid">—</span>
+      <span class="sep">·</span>
+      <span id="metaCond">—</span>
+      <span class="sep">·</span>
+      <span id="metaDur">—</span>
+      <span class="sep">·</span>
+      <span id="metaN">— samples</span>
+    </div>
+    <button id="reloadBtn">← Load new</button>
+  </div>
+
+  <!-- 4 summary stats -->
+  <div id="summary">
+    <div class="stat-card">
+      <div class="stat-accent-bar" style="background:var(--accent)"></div>
+      <div class="stat-label">Mean Fixation Duration</div>
+      <div class="stat-value" id="valMFD">—<span class="stat-unit">s</span></div>
+      <div class="stat-sub" id="subMFD">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-accent-bar" style="background:var(--accent2)"></div>
+      <div class="stat-label">Spatial Entropy</div>
+      <div class="stat-value" id="valEnt">—<span class="stat-unit">bits</span></div>
+      <div class="stat-sub" id="subEnt">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-accent-bar" style="background:var(--accent3)"></div>
+      <div class="stat-label">Mean Saccade Amplitude</div>
+      <div class="stat-value" id="valSac">—<span class="stat-unit">px</span></div>
+      <div class="stat-sub" id="subSac">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-accent-bar" style="background:var(--accent4)"></div>
+      <div class="stat-label">Fixation Count</div>
+      <div class="stat-value" id="valFix">—</div>
+      <div class="stat-sub" id="subFix">—</div>
+    </div>
+  </div>
+
+  <!-- 4 detail sections -->
+  <div id="sections">
+
+    <!-- 1. Fixation duration distribution -->
+    <div class="section">
+      <div class="section-label">
+        <div class="section-dot" style="background:var(--accent)"></div>
+        Fixation Duration Distribution
+      </div>
+      <div id="fixDist"></div>
+    </div>
+
+    <!-- 2. Spatial entropy / density grid -->
+    <div class="section">
+      <div class="section-label">
+        <div class="section-dot" style="background:var(--accent2)"></div>
+        Fixation Density Map
+      </div>
+      <canvas id="densityCanvas" class="chart" height="200"></canvas>
+      <div id="entropyDetail" style="margin-top:16px;"></div>
+    </div>
+
+    <!-- 3. Saccade amplitude histogram -->
+    <div class="section">
+      <div class="section-label">
+        <div class="section-dot" style="background:var(--accent3)"></div>
+        Saccade Amplitude Distribution
+      </div>
+      <canvas id="saccadeCanvas" class="chart" height="160"></canvas>
+      <div id="saccadeStats" style="margin-top:14px;display:flex;gap:24px;flex-wrap:wrap;"></div>
+    </div>
+
+    <!-- 4. Scanpath over time -->
+    <div class="section">
+      <div class="section-label">
+        <div class="section-dot" style="background:var(--accent4)"></div>
+        Gaze Position Over Time
+      </div>
+      <canvas id="timelineCanvas" class="chart" height="160"></canvas>
+      <div id="timelineStats" style="margin-top:14px;display:flex;gap:24px;flex-wrap:wrap;"></div>
+    </div>
+
+  </div>
+
+  <div id="footer">
+    <span>Gaze Metrics Analyzer · WebGazer session</span>
+    <span id="footerTimestamp">—</span>
+  </div>
+</div>
+
+<script>
+// ── Drop / load ────────────────────────────────────────────
+const dropScreen=document.getElementById('dropScreen');
+const dropZone=document.getElementById('dropZone');
+const fileIn=document.getElementById('fileIn');
+const app=document.getElementById('app');
+
+dropZone.addEventListener('click',()=>fileIn.click());
+fileIn.addEventListener('change',()=>{if(fileIn.files[0])loadFile(fileIn.files[0]);fileIn.value='';});
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('over');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+document.getElementById('reloadBtn').addEventListener('click',()=>{
+  dropScreen.classList.remove('gone');app.classList.remove('visible');
+});
+
+function loadFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    let data;
+    try{data=JSON.parse(e.target.result);}catch(err){alert('Could not parse file.');return;}
+    if(data._type!=='webgazer_session'){alert('Not a WebGazer session file.');return;}
+    dropScreen.classList.add('gone');
+    app.classList.add('visible');
+    setTimeout(()=>analyze(data),80);
+  };
+  reader.readAsText(file);
+}
+
+// ── Core analysis ──────────────────────────────────────────
+function analyze(session){
+  const samples=session.samples||[];
+  const scanpath=session.scanpath||(()=>{
+    const out=[];let lastT=-Infinity;
+    for(const s of samples){
+      if(!s.valid||typeof s.x_px!=='number')continue;
+      if(s.t_ms-lastT<200)continue;
+      out.push({t_ms:s.t_ms,x_px:s.x_px,y_px:s.y_px});
+      lastT=s.t_ms;
+    }
+    return out;
+  })();
+
+  const maxT=session.actual_duration_ms||(samples.length?samples[samples.length-1].t_ms:30000);
+  const srcW=session.screen_w||session.screenWidth||window.innerWidth||1440;
+  const srcH=session.screen_h||session.screenHeight||window.innerHeight||900;
+  const validSamples=samples.filter(s=>s.valid&&typeof s.x_px==='number');
+
+  // Header
+  document.getElementById('metaPid').textContent=session.participant_id||'—';
+  document.getElementById('metaCond').textContent=session.condition||'—';
+  document.getElementById('metaDur').textContent=(maxT/1000).toFixed(1)+'s';
+  document.getElementById('metaN').textContent=validSamples.length+' samples';
+  document.getElementById('footerTimestamp').textContent=session.exported_at_iso||'';
+
+  // ── 1. Fixation durations ──────────────────────────────
+  // Each scanpath point's dwell = time until next point (or end)
+  const fixDurations=scanpath.map((p,i)=>{
+    const nextT=i<scanpath.length-1?scanpath[i+1].t_ms:maxT;
+    return(nextT-p.t_ms)/1000;
+  }).filter(d=>d>0&&d<10); // sanity cap at 10s
+
+  const mfd=fixDurations.length?fixDurations.reduce((a,b)=>a+b,0)/fixDurations.length:0;
+  const mfdMedian=median(fixDurations);
+  const mfdMax=fixDurations.length?Math.max(...fixDurations):0;
+  const mfdMin=fixDurations.length?Math.min(...fixDurations):0;
+
+  document.getElementById('valMFD').innerHTML=mfd.toFixed(2)+'<span class="stat-unit">s</span>';
+  document.getElementById('subMFD').textContent=`median ${mfdMedian.toFixed(2)}s · range ${mfdMin.toFixed(2)}–${mfdMax.toFixed(1)}s · n=${fixDurations.length}`;
+
+  // Duration bins (0–0.5s, 0.5–1s, 1–2s, 2–4s, 4s+)
+  const durBins=[
+    {label:'< 0.5s',lo:0,hi:0.5,color:'var(--accent)'},
+    {label:'0.5–1s',lo:0.5,hi:1.0,color:'var(--accent)'},
+    {label:'1–2s',lo:1.0,hi:2.0,color:'var(--accent)'},
+    {label:'2–4s',lo:2.0,hi:4.0,color:'var(--accent)'},
+    {label:'4s +',lo:4.0,hi:Infinity,color:'var(--accent)'},
+  ];
+  const binCounts=durBins.map(b=>fixDurations.filter(d=>d>=b.lo&&d<b.hi).length);
+  const binMax=Math.max(...binCounts,1);
+  const fixDistEl=document.getElementById('fixDist');
+  fixDistEl.innerHTML='';
+  durBins.forEach((b,i)=>{
+    const pct=(binCounts[i]/binMax*100).toFixed(1);
+    const row=document.createElement('div');row.className='dist-row';
+    row.innerHTML=`
+      <div class="dist-label">${b.label}</div>
+      <div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:var(--accent);opacity:${0.4+0.6*(binCounts[i]/binMax)}"></div></div>
+      <div class="dist-val">${binCounts[i]}</div>`;
+    fixDistEl.appendChild(row);
+  });
+  // Add mean line note
+  const note=document.createElement('div');
+  note.style.cssText='margin-top:14px;font-size:10px;color:var(--muted);line-height:1.7;';
+  note.innerHTML=`Mean <span style="color:var(--accent)">${mfd.toFixed(3)}s</span> &nbsp;·&nbsp; Median <span style="color:var(--accent)">${mfdMedian.toFixed(3)}s</span> &nbsp;·&nbsp; SD <span style="color:var(--accent)">${stddev(fixDurations).toFixed(3)}s</span>`;
+  fixDistEl.appendChild(note);
+
+  // ── 2. Spatial entropy + density map ──────────────────
+  // Grid-based entropy: divide screen into NxN cells, compute Shannon entropy of fixation distribution
+  const ENT_N=8;
+  const cellCounts=new Float32Array(ENT_N*ENT_N);
+  for(const p of scanpath){
+    const cx=Math.min(ENT_N-1,Math.floor((p.x_px/srcW)*ENT_N));
+    const cy=Math.min(ENT_N-1,Math.floor((p.y_px/srcH)*ENT_N));
+    if(cx>=0&&cy>=0)cellCounts[cy*ENT_N+cx]++;
+  }
+  const totalFix=scanpath.length||1;
+  let entropy=0;
+  for(let i=0;i<cellCounts.length;i++){
+    if(cellCounts[i]>0){const p=cellCounts[i]/totalFix;entropy-=p*Math.log2(p);}
+  }
+  const maxEntropy=Math.log2(ENT_N*ENT_N); // 6 bits for 8x8
+  const normEntropy=entropy/maxEntropy;
+
+  document.getElementById('valEnt').innerHTML=entropy.toFixed(2)+'<span class="stat-unit">bits</span>';
+  document.getElementById('subEnt').textContent=`${(normEntropy*100).toFixed(0)}% of max (${maxEntropy.toFixed(1)} bits) · ${ENT_N}×${ENT_N} grid`;
+
+  // Draw density canvas
+  const dc=document.getElementById('densityCanvas');
+  const dpr=window.devicePixelRatio||1;
+  const dcW=dc.parentElement.clientWidth-72;
+  dc.width=dcW*dpr;dc.height=200*dpr;
+  dc.style.width=dcW+'px';dc.style.height='200px';
+  const dctx=dc.getContext('2d');
+  dctx.setTransform(dpr,0,0,dpr,0,0);
+  drawDensityMap(dctx,dcW,200,cellCounts,ENT_N,scanpath,srcW,srcH);
+
+  // Entropy detail
+  const entDetail=document.getElementById('entropyDetail');
+  const entPct=(normEntropy*100).toFixed(0);
+  entDetail.innerHTML=`
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div style="flex:1;">
+        <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${entPct}%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width 800ms ease;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--muted);letter-spacing:0.08em;">
+          <span>FOCUSED (0)</span><span>DISPERSED (${maxEntropy.toFixed(1)} bits)</span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);white-space:nowrap;">${entPct}% dispersal</div>
+    </div>
+    <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.6;">
+      ${normEntropy<0.33?'Highly <span style="color:var(--accent2)">focused</span> gaze — most attention in a few regions.'
+        :normEntropy<0.66?'<span style="color:var(--accent2)">Moderately distributed</span> gaze across the stimulus.'
+        :'Highly <span style="color:var(--accent2)">dispersed</span> gaze — attention spread broadly across the screen.'}
+    </div>`;
+
+  // ── 3. Saccade amplitudes ──────────────────────────────
+  const saccades=[];
+  for(let i=1;i<scanpath.length;i++){
+    const a=scanpath[i-1],b=scanpath[i];
+    const dx=b.x_px-a.x_px,dy=b.y_px-a.y_px;
+    const amp=Math.sqrt(dx*dx+dy*dy);
+    const angle=Math.atan2(dy,dx)*(180/Math.PI);
+    saccades.push({amp,angle,dx,dy});
+  }
+  const amps=saccades.map(s=>s.amp);
+  const meanAmp=amps.length?amps.reduce((a,b)=>a+b,0)/amps.length:0;
+  const medAmp=median(amps);
+  const maxAmp=amps.length?Math.max(...amps):0;
+
+  document.getElementById('valSac').innerHTML=meanAmp.toFixed(0)+'<span class="stat-unit">px</span>';
+  document.getElementById('subSac').textContent=`median ${medAmp.toFixed(0)}px · max ${maxAmp.toFixed(0)}px · n=${saccades.length}`;
+
+  // Saccade histogram
+  const sc=document.getElementById('saccadeCanvas');
+  sc.width=(sc.parentElement.clientWidth-72)*dpr;sc.height=160*dpr;
+  sc.style.width=(sc.parentElement.clientWidth-72)+'px';sc.style.height='160px';
+  const sctx=sc.getContext('2d');
+  sctx.setTransform(dpr,0,0,dpr,0,0);
+  drawHistogram(sctx,(sc.parentElement.clientWidth-72),160,amps,'var(--accent3)',20);
+
+  // Saccade stats
+  const sacStats=document.getElementById('saccadeStats');
+  const horizCount=saccades.filter(s=>Math.abs(s.dx)>Math.abs(s.dy)).length;
+  const vertCount=saccades.length-horizCount;
+  sacStats.innerHTML=`
+    <div style="font-size:10px;color:var(--muted);line-height:1.8;">
+      Mean &nbsp;<span style="color:var(--accent3)">${meanAmp.toFixed(1)}px</span><br>
+      Median &nbsp;<span style="color:var(--accent3)">${medAmp.toFixed(1)}px</span><br>
+      SD &nbsp;<span style="color:var(--accent3)">${stddev(amps).toFixed(1)}px</span>
+    </div>
+    <div style="font-size:10px;color:var(--muted);line-height:1.8;">
+      Horizontal &nbsp;<span style="color:var(--accent3)">${horizCount}</span> (${saccades.length?((horizCount/saccades.length)*100).toFixed(0):0}%)<br>
+      Vertical &nbsp;<span style="color:var(--accent3)">${vertCount}</span> (${saccades.length?((vertCount/saccades.length)*100).toFixed(0):0}%)<br>
+      Total &nbsp;<span style="color:var(--accent3)">${saccades.length}</span>
+    </div>`;
+
+  // ── 4. Fixation density summary ────────────────────────
+  document.getElementById('valFix').textContent=scanpath.length;
+  const fixRate=maxT>0?(scanpath.length/(maxT/1000)).toFixed(2):0;
+  document.getElementById('subFix').textContent=`${fixRate} fixations/sec · ${validSamples.length} valid raw samples`;
+
+  // Timeline canvas — gaze x and y over time
+  const tc=document.getElementById('timelineCanvas');
+  tc.width=(tc.parentElement.clientWidth-72)*dpr;tc.height=160*dpr;
+  tc.style.width=(tc.parentElement.clientWidth-72)+'px';tc.style.height='160px';
+  const tctx=tc.getContext('2d');
+  tctx.setTransform(dpr,0,0,dpr,0,0);
+  drawTimeline(tctx,(tc.parentElement.clientWidth-72),160,validSamples,maxT,srcW,srcH);
+
+  // Timeline stats
+  const tlStats=document.getElementById('timelineStats');
+  const xVals=validSamples.map(s=>s.x_px/srcW);
+  const yVals=validSamples.map(s=>s.y_px/srcH);
+  const xMean=xVals.reduce((a,b)=>a+b,0)/xVals.length;
+  const yMean=yVals.reduce((a,b)=>a+b,0)/yVals.length;
+  tlStats.innerHTML=`
+    <div style="font-size:10px;color:var(--muted);line-height:1.8;">
+      Mean X &nbsp;<span style="color:var(--accent4)">${(xMean*100).toFixed(1)}%</span> of screen<br>
+      Mean Y &nbsp;<span style="color:var(--accent4)">${(yMean*100).toFixed(1)}%</span> of screen
+    </div>
+    <div style="font-size:10px;color:var(--muted);line-height:1.8;">
+      X spread (SD) &nbsp;<span style="color:var(--accent4)">${(stddev(xVals)*100).toFixed(1)}%</span><br>
+      Y spread (SD) &nbsp;<span style="color:var(--accent4)">${(stddev(yVals)*100).toFixed(1)}%</span>
+    </div>`;
+}
+
+// ── Drawing helpers ────────────────────────────────────────
+
+function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH){
+  const cw=W/N,ch=H/N;
+  const maxC=Math.max(...counts,1);
+  // cells
+  for(let cy=0;cy<N;cy++){
+    for(let cx=0;cx<N;cx++){
+      const v=counts[cy*N+cx]/maxC;
+      if(v<0.01)continue;
+      // color ramp: dark → accent2
+      const r=Math.round(29+(100-29)*v);
+      const g=Math.round(59+(184-59)*v);
+      const b=Math.round(122+(240-122)*v);
+      ctx.fillStyle=`rgba(${r},${g},${b},${0.12+v*0.75})`;
+      ctx.fillRect(cx*cw,cy*ch,cw,ch);
+    }
+  }
+  // grid lines
+  ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.5;
+  for(let i=1;i<N;i++){
+    ctx.beginPath();ctx.moveTo(i*cw,0);ctx.lineTo(i*cw,H);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*ch);ctx.lineTo(W,i*ch);ctx.stroke();
+  }
+  // border
+  ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
+  ctx.strokeRect(0,0,W,H);
+  // scanpath overlay
+  if(scanpath.length>=2){
+    ctx.save();ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=0.8;ctx.setLineDash([2,3]);
+    ctx.beginPath();
+    scanpath.forEach((p,i)=>{
+      const x=(p.x_px/srcW)*W,y=(p.y_px/srcH)*H;
+      if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    });
+    ctx.stroke();ctx.setLineDash([]);ctx.restore();
+  }
+  // fixation dots
+  for(const p of scanpath){
+    const x=(p.x_px/srcW)*W,y=(p.y_px/srcH)*H;
+    ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);
+    ctx.fillStyle='rgba(100,184,240,0.9)';ctx.fill();
+  }
+}
+
+function drawHistogram(ctx,W,H,values,color,nBins){
+  if(!values.length)return;
+  const minV=0,maxV=Math.max(...values)*1.05;
+  const binW=(maxV-minV)/nBins;
+  const bins=new Array(nBins).fill(0);
+  for(const v of values){
+    const bi=Math.min(nBins-1,Math.floor((v-minV)/binW));
+    bins[bi]++;
+  }
+  const maxB=Math.max(...bins,1);
+  const barW=(W-2)/nBins;
+  const pad=6;
+
+  // axes
+  ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,H-pad);ctx.lineTo(W,H-pad);ctx.stroke();
+
+  // bars
+  for(let i=0;i<nBins;i++){
+    const bh=((bins[i]/maxB)*(H-pad*2-10));
+    const x=i*barW+1,y=H-pad-bh;
+    const alpha=0.25+0.7*(bins[i]/maxB);
+    ctx.fillStyle=color.replace('var(--accent3)','rgba(240,150,100,'+alpha+')');
+    // fallback color
+    ctx.fillStyle=`rgba(240,150,100,${alpha})`;
+    ctx.fillRect(x,y,barW-1,bh);
+  }
+
+  // x-axis labels (min, mean, max)
+  ctx.fillStyle='rgba(255,255,255,0.25)';ctx.font='9px "Space Mono",monospace';
+  ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText('0px',2,H-pad+3);
+  ctx.textAlign='right';ctx.fillText(Math.round(maxV)+'px',W-2,H-pad+3);
+  const meanV=values.reduce((a,b)=>a+b,0)/values.length;
+  const mx=(meanV/maxV)*W;
+  ctx.strokeStyle='rgba(240,150,100,0.5)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,H-pad);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='rgba(240,150,100,0.6)';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillText('μ='+Math.round(meanV)+'px',mx,2);
+}
+
+function drawTimeline(ctx,W,H,samples,maxT,srcW,srcH){
+  if(samples.length<2)return;
+  const pad=6;
+
+  // x-axis
+  ctx.strokeStyle='rgba(255,255,255,0.06)';ctx.lineWidth=0.5;
+  ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,H-pad);ctx.lineTo(W,H-pad);ctx.stroke();
+
+  // x position trace (upper half) — colored
+  const xMid=H*0.25,xRange=H*0.22;
+  ctx.save();ctx.lineJoin='round';ctx.lineCap='round';
+  for(let i=1;i<samples.length;i++){
+    const s0=samples[i-1],s1=samples[i];
+    if(s1.t_ms-s0.t_ms>1000)continue;
+    const x0=(s0.t_ms/maxT)*W,x1=(s1.t_ms/maxT)*W;
+    const y0=xMid+(0.5-s0.x_px/srcW)*xRange*2;
+    const y1=xMid+(0.5-s1.x_px/srcW)*xRange*2;
+    ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);
+    ctx.strokeStyle='rgba(180,100,240,0.55)';ctx.lineWidth=0.9;ctx.stroke();
+  }
+  // y position trace (lower half)
+  const yMid=H*0.75,yRange=H*0.18;
+  ctx.setLineDash([2,3]);
+  for(let i=1;i<samples.length;i++){
+    const s0=samples[i-1],s1=samples[i];
+    if(s1.t_ms-s0.t_ms>1000)continue;
+    const x0=(s0.t_ms/maxT)*W,x1=(s1.t_ms/maxT)*W;
+    const y0=yMid+(s0.y_px/srcH-0.5)*yRange*2;
+    const y1=yMid+(s1.y_px/srcH-0.5)*yRange*2;
+    ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);
+    ctx.strokeStyle='rgba(180,100,240,0.30)';ctx.lineWidth=0.7;ctx.stroke();
+  }
+  ctx.setLineDash([]);ctx.restore();
+
+  // labels
+  ctx.fillStyle='rgba(255,255,255,0.18)';ctx.font='8px "Space Mono",monospace';
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillText('x',2,xMid);ctx.fillText('y',2,yMid);
+  ctx.textAlign='right';
+  ctx.fillText((maxT/1000).toFixed(1)+'s',W-2,H-pad+4);
+  ctx.textAlign='left';ctx.fillText('0s',2,H-pad+4);
+}
+
+// ── Math utils ─────────────────────────────────────────────
+function median(arr){
+  if(!arr.length)return 0;
+  const s=[...arr].sort((a,b)=>a-b);
+  const m=Math.floor(s.length/2);
+  return s.length%2?s[m]:(s[m-1]+s[m])/2;
+}
+function stddev(arr){
+  if(arr.length<2)return 0;
+  const m=arr.reduce((a,b)=>a+b,0)/arr.length;
+  return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length);
+}
+</script>
+</body>
+</html>
