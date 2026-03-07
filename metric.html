@@ -234,12 +234,11 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
     <div class="section">
       <div class="section-label">
         <div class="section-dot" style="background:var(--accent3)"></div>
-        Saccade Amplitude Distribution
+        Saccade Amplitude Over Time
       </div>
       <canvas id="saccadeCanvas" class="chart" height="160"></canvas>
       <div id="saccadeStats" style="margin-top:14px;display:flex;gap:24px;flex-wrap:wrap;"></div>
     </div>
-
     <!-- 4. Color dwell analysis -->
     <div class="section">
       <div class="section-label">
@@ -427,7 +426,7 @@ function analyze(session){
     const dx=b.x_px-a.x_px,dy=b.y_px-a.y_px;
     const amp=Math.sqrt(dx*dx+dy*dy);
     const angle=Math.atan2(dy,dx)*(180/Math.PI);
-    saccades.push({amp,angle,dx,dy});
+    saccades.push({amp, angle, dx, dy, t_ms: b.t_ms});
   }
   const amps=saccades.map(s=>s.amp);
   const meanAmp=amps.length?amps.reduce((a,b)=>a+b,0)/amps.length:0;
@@ -437,13 +436,14 @@ function analyze(session){
   document.getElementById('valSac').innerHTML=meanAmp.toFixed(0)+'<span class="stat-unit">px</span>';
   document.getElementById('subSac').textContent=`median ${medAmp.toFixed(0)}px · max ${maxAmp.toFixed(0)}px · n=${saccades.length}`;
 
-  // Saccade histogram
+  // Saccade temporal chart
   const sc=document.getElementById('saccadeCanvas');
-  sc.width=(sc.parentElement.clientWidth-72)*dpr;sc.height=190*dpr;
-  sc.style.width=(sc.parentElement.clientWidth-72)+'px';sc.style.height='190px';
+  const scW=sc.parentElement.clientWidth-72;
+  sc.width=scW*dpr; sc.height=160*dpr;
+  sc.style.width=scW+'px'; sc.style.height='160px';
   const sctx=sc.getContext('2d');
   sctx.setTransform(dpr,0,0,dpr,0,0);
-  drawHistogram(sctx,(sc.parentElement.clientWidth-72),190,amps,isLight,20);
+  drawSaccadeTemporal(sctx, scW, 160, saccades, maxT, isLight);
 
   // Saccade stats
   const sacStats=document.getElementById('saccadeStats');
@@ -451,13 +451,14 @@ function analyze(session){
   const vertCount=saccades.length-horizCount;
   sacStats.innerHTML=`
     <div style="font-size:10px;color:var(--muted);line-height:1.8;">
-      Mean &nbsp;<span style="color:var(--accent3)">${meanAmp.toFixed(1)}px</span><br>
-      Median &nbsp;<span style="color:var(--accent3)">${medAmp.toFixed(1)}px</span><br>
-      SD &nbsp;<span style="color:var(--accent3)">${stddev(amps).toFixed(1)}px</span>
+      Mean &nbsp;<span style="color:var(--accent3)">${meanAmp.toFixed(1)}px</span>&nbsp;·&nbsp;
+      Median &nbsp;<span style="color:var(--accent3)">${medAmp.toFixed(1)}px</span>&nbsp;·&nbsp;
+      SD &nbsp;<span style="color:var(--accent3)">${stddev(amps).toFixed(1)}px</span>&nbsp;·&nbsp;
+      Max &nbsp;<span style="color:var(--accent3)">${maxAmp.toFixed(0)}px</span>
     </div>
     <div style="font-size:10px;color:var(--muted);line-height:1.8;">
-      Horizontal &nbsp;<span style="color:var(--accent3)">${horizCount}</span> (${saccades.length?((horizCount/saccades.length)*100).toFixed(0):0}%)<br>
-      Vertical &nbsp;<span style="color:var(--accent3)">${vertCount}</span> (${saccades.length?((vertCount/saccades.length)*100).toFixed(0):0}%)<br>
+      Horiz &nbsp;<span style="color:var(--accent3)">${horizCount}</span> (${saccades.length?((horizCount/saccades.length)*100).toFixed(0):0}%)&nbsp;·&nbsp;
+      Vert &nbsp;<span style="color:var(--accent3)">${vertCount}</span>&nbsp;·&nbsp;
       Total &nbsp;<span style="color:var(--accent3)">${saccades.length}</span>
     </div>`;
 
@@ -569,6 +570,81 @@ function drawHistogram(ctx,W,H,values,isLight,nBins){
   ctx.fillText('0px', 2, baseline+4);
   ctx.textAlign='right';
   ctx.fillText(Math.round(maxV)+'px', W-2, baseline+4);
+}
+
+function drawSaccadeTemporal(ctx, W, H, saccades, maxT, isLight) {
+  if (!saccades.length) return;
+
+  const axisCol  = isLight ? 'rgba(26,24,20,0.10)' : 'rgba(255,255,255,0.08)';
+  const gridCol  = isLight ? 'rgba(26,24,20,0.05)' : 'rgba(255,255,255,0.04)';
+  const labelCol = isLight ? 'rgba(26,24,20,0.32)' : 'rgba(255,255,255,0.28)';
+  const [br, bg, bb] = isLight ? [179, 106, 43] : [210, 130, 80]; // accent3
+
+  const topZone = 16, botZone = 16;
+  const chartH  = H - topZone - botZone;
+  const baseline = topZone + chartH;
+
+  const maxAmp = Math.max(...saccades.map(s => s.amp));
+  const meanAmp = saccades.reduce((a, s) => a + s.amp, 0) / saccades.length;
+
+  // Background
+  ctx.fillStyle = isLight ? 'rgba(0,0,0,0.015)' : 'rgba(255,255,255,0.015)';
+  ctx.fillRect(0, topZone, W, chartH);
+
+  // Horizontal grid lines at 25%, 50%, 75%
+  ctx.strokeStyle = gridCol; ctx.lineWidth = 0.5; ctx.setLineDash([3, 4]);
+  for (const pct of [0.25, 0.5, 0.75]) {
+    const y = topZone + chartH * (1 - pct);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Baseline
+  ctx.strokeStyle = axisCol; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, baseline); ctx.lineTo(W, baseline); ctx.stroke();
+
+  // Mean line (dashed, horizontal)
+  const meanY = topZone + chartH * (1 - meanAmp / maxAmp);
+  ctx.strokeStyle = `rgba(${br},${bg},${bb},0.4)`; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(0, meanY); ctx.lineTo(W, meanY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = `rgba(${br},${bg},${bb},0.55)`;
+  ctx.font = '8px "DM Mono",monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.fillText('μ ' + Math.round(meanAmp) + 'px', 2, meanY - 1);
+
+  // Spikes — each saccade is a vertical line from baseline up, width proportional to amp
+  // Color: low amp = muted, high amp = vivid accent3
+  for (const s of saccades) {
+    const x  = (s.t_ms / maxT) * W;
+    const h  = (s.amp / maxAmp) * chartH;
+    const y  = baseline - h;
+    const ratio = s.amp / maxAmp;
+    const alpha = 0.2 + ratio * 0.75;
+    const spikeW = Math.max(1.5, 2.5 * ratio);
+    ctx.strokeStyle = `rgba(${br},${bg},${bb},${alpha})`;
+    ctx.lineWidth = spikeW;
+    ctx.beginPath(); ctx.moveTo(x, baseline); ctx.lineTo(x, y); ctx.stroke();
+    // dot at peak of each spike
+    ctx.fillStyle = `rgba(${br},${bg},${bb},${alpha})`;
+    ctx.beginPath(); ctx.arc(x, y, spikeW * 0.8, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Time axis labels
+  ctx.fillStyle = labelCol; ctx.font = '8px "DM Mono",monospace';
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  for (const t of ticks) {
+    const x = t * W;
+    ctx.strokeStyle = axisCol; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, baseline); ctx.lineTo(x, baseline + 3); ctx.stroke();
+    ctx.textAlign = t === 0 ? 'left' : t === 1 ? 'right' : 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText((t * maxT / 1000).toFixed(0) + 's', x, baseline + 4);
+  }
+
+  // Y axis labels
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.fillText(Math.round(maxAmp) + 'px', W - 1, topZone + 4);
+  ctx.fillText('0', W - 1, baseline - 4);
 }
 
 // ── Color Dwell Analysis ───────────────────────────────────
