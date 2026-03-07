@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Gaze Metrics</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;1,300&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -13,36 +13,48 @@
   --border:rgba(255,255,255,0.07);
   --text:#e8e6e0;
   --muted:rgba(232,230,224,0.38);
-  --accent:#c8f064;
-  --accent2:#64b8f0;
-  --accent3:#f09664;
-  --accent4:#b464f0;
-  --red:#f06464;
+  --accent:#c8602a;
+  --accent2:#2b7ab3;
+  --accent3:#b36a2b;
+  --accent4:#7b4bb3;
+  --red:#b34b4b;
+  --ink-faint:rgba(26,24,20,0.12);
 }
-html,body{width:100%;min-height:100%;background:var(--bg);color:var(--text);font-family:'Space Mono',monospace;overflow-x:hidden;}
+body.light{
+  --bg:#f5f0e8;
+  --surface:#edeae0;
+  --border:rgba(26,24,20,0.10);
+  --text:#1a1814;
+  --muted:rgba(26,24,20,0.38);
+  --accent:#c8602a;
+  --accent2:#2b7ab3;
+  --accent3:#b36a2b;
+  --accent4:#7b4bb3;
+}
+html,body{width:100%;min-height:100%;background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;overflow-x:hidden;transition:background 300ms,color 300ms;}
 
 /* ── Drop screen ── */
 #dropScreen{
   position:fixed;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:32px;z-index:100;
-  background:var(--bg);transition:opacity 400ms ease;
+  background:var(--bg);transition:opacity 400ms ease,background 300ms;
 }
 #dropScreen.gone{opacity:0;pointer-events:none;}
-.drop-title{font-family:'Instrument Serif',serif;font-size:clamp(36px,6vw,72px);font-weight:400;letter-spacing:-0.02em;line-height:1.0;text-align:center;}
+.drop-title{font-family:'Cormorant Garamond',serif;font-size:clamp(36px,6vw,72px);font-weight:400;letter-spacing:-0.02em;line-height:1.0;text-align:center;}
 .drop-title em{font-style:italic;color:var(--accent);}
 #dropZone{
   width:min(480px,88vw);height:200px;
-  border:1px solid rgba(255,255,255,0.14);border-radius:3px;
+  border:1px solid var(--border);border-radius:3px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
   cursor:pointer;transition:border-color 200ms,background 200ms;
-  background:rgba(255,255,255,0.02);
+  background:rgba(128,128,128,0.03);
 }
 #dropZone:hover,#dropZone.over{border-color:var(--accent);background:rgba(200,240,100,0.04);}
-#dropZone .icon{font-size:32px;opacity:0.3;}
-#dropZone p{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.4;text-align:center;line-height:1.8;}
+#dropZone .icon{font-size:32px;color:var(--muted);}
+#dropZone p{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);text-align:center;line-height:1.8;}
 #dropZone p strong{color:var(--accent);opacity:1;}
 #fileIn{display:none;}
-.drop-sub{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.2;}
+.drop-sub{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);}
 
 /* ── Main layout ── */
 #app{display:none;min-height:100vh;}
@@ -55,18 +67,27 @@ html,body{width:100%;min-height:100%;background:var(--bg);color:var(--text);font
   display:flex;align-items:baseline;justify-content:space-between;gap:20px;
   flex-wrap:wrap;
 }
-.header-title{font-family:'Instrument Serif',serif;font-size:22px;font-weight:400;letter-spacing:-0.01em;}
+.header-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;letter-spacing:-0.01em;}
 .header-title em{font-style:italic;color:var(--accent);}
 .header-meta{font-size:10px;letter-spacing:0.10em;text-transform:uppercase;color:var(--muted);display:flex;gap:20px;flex-wrap:wrap;align-items:center;}
 .header-meta span{white-space:nowrap;}
 .header-meta .sep{opacity:0.2;}
 #reloadBtn{
   background:none;border:1px solid var(--border);color:var(--muted);
-  font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.08em;
+  font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.08em;
   text-transform:uppercase;padding:5px 12px;border-radius:2px;cursor:pointer;
   transition:border-color 150ms,color 150ms;
 }
 #reloadBtn:hover{border-color:var(--accent);color:var(--accent);}
+.hdr-btn{
+  background:none;border:1px solid var(--border);color:var(--muted);
+  font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.08em;
+  text-transform:uppercase;padding:5px 12px;border-radius:2px;cursor:pointer;
+  transition:border-color 150ms,color 150ms,background 150ms;
+}
+.hdr-btn:hover{border-color:var(--accent);color:var(--accent);}
+.hdr-btn.active{background:rgba(26,24,20,0.08);border-color:rgba(26,24,20,0.30);color:var(--text);}
+body.light .hdr-btn.active{background:rgba(26,24,20,0.08);border-color:rgba(26,24,20,0.30);color:var(--text);}
 
 /* Summary row */
 #summary{
@@ -81,8 +102,8 @@ html,body{width:100%;min-height:100%;background:var(--bg);color:var(--text);font
 .stat-card:last-child{border-right:none;}
 .stat-accent-bar{position:absolute;top:0;left:0;right:0;height:2px;}
 .stat-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
-.stat-value{font-family:'Instrument Serif',serif;font-size:clamp(28px,3vw,44px);font-weight:400;line-height:1.0;letter-spacing:-0.02em;}
-.stat-unit{font-size:11px;color:var(--muted);margin-left:4px;font-family:'Space Mono',monospace;}
+.stat-value{font-family:'Cormorant Garamond',serif;font-size:clamp(28px,3vw,44px);font-weight:400;line-height:1.0;letter-spacing:-0.02em;}
+.stat-unit{font-size:11px;color:var(--muted);margin-left:4px;font-family:'DM Mono',monospace;}
 .stat-sub{font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5;}
 
 /* Sections */
@@ -92,6 +113,7 @@ html,body{width:100%;min-height:100%;background:var(--bg);color:var(--text);font
 .section-label{
   font-size:9px;letter-spacing:0.14em;text-transform:uppercase;
   color:var(--muted);margin-bottom:20px;display:flex;align-items:center;gap:10px;
+  transition:color 300ms;
 }
 .section-dot{width:6px;height:6px;border-radius:50%;}
 canvas.chart{width:100%;border-radius:2px;display:block;}
@@ -107,7 +129,7 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
 #entropyGauge{display:flex;align-items:center;gap:24px;margin-top:8px;}
 .entropy-arc-wrap{flex-shrink:0;}
 .entropy-info{flex:1;}
-.entropy-num{font-family:'Instrument Serif',serif;font-size:40px;letter-spacing:-0.02em;line-height:1;}
+.entropy-num{font-family:'Cormorant Garamond',serif;font-size:40px;letter-spacing:-0.02em;line-height:1;}
 .entropy-label{font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5;}
 .entropy-scale{display:flex;gap:0;margin-top:14px;border-radius:2px;overflow:hidden;height:4px;}
 .entropy-scale span{flex:1;}
@@ -116,7 +138,7 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
 .hist-wrap{position:relative;}
 
 /* Footer */
-#footer{padding:20px 40px;display:flex;justify-content:space-between;align-items:center;opacity:0.3;font-size:10px;letter-spacing:0.08em;}
+#footer{padding:20px 40px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:10px;letter-spacing:0.08em;}
 
 @media(max-width:700px){
   #summary{grid-template-columns:1fr 1fr;}
@@ -155,7 +177,7 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
       <span class="sep">·</span>
       <span id="metaN">— samples</span>
     </div>
-    <button id="reloadBtn">← Load new</button>
+    <div style="display:flex;gap:8px;align-items:center;"><button id="btnBeige" class="hdr-btn">Beige</button><button id="btnDark" class="hdr-btn active">Dark</button><button id="exportBtn" class="hdr-btn" style="color:var(--accent);border-color:rgba(200,96,42,0.3);">↓ PNG</button><button id="reloadBtn">← Load new</button></div>
   </div>
 
   <!-- 4 summary stats -->
@@ -237,6 +259,7 @@ canvas.chart{width:100%;border-radius:2px;display:block;}
 </div>
 
 <script>
+let currentSession = null;
 // ── Drop / load ────────────────────────────────────────────
 const dropScreen=document.getElementById('dropScreen');
 const dropZone=document.getElementById('dropZone');
@@ -260,7 +283,7 @@ function loadFile(file){
     if(data._type!=='webgazer_session'){alert('Not a WebGazer session file.');return;}
     dropScreen.classList.add('gone');
     app.classList.add('visible');
-    setTimeout(()=>analyze(data),80);
+    currentSession=data;setTimeout(()=>analyze(data),80);
   };
   reader.readAsText(file);
 }
@@ -361,7 +384,8 @@ function analyze(session){
   dc.style.width=dcW+'px';dc.style.height='200px';
   const dctx=dc.getContext('2d');
   dctx.setTransform(dpr,0,0,dpr,0,0);
-  drawDensityMap(dctx,dcW,200,cellCounts,ENT_N,scanpath,srcW,srcH);
+  const isLight=document.body.classList.contains('light');
+  drawDensityMap(dctx,dcW,200,cellCounts,ENT_N,scanpath,srcW,srcH,isLight);
 
   // Entropy detail
   const entDetail=document.getElementById('entropyDetail');
@@ -369,7 +393,7 @@ function analyze(session){
   entDetail.innerHTML=`
     <div style="display:flex;align-items:center;gap:16px;">
       <div style="flex:1;">
-        <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
           <div style="height:100%;width:${entPct}%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width 800ms ease;"></div>
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--muted);letter-spacing:0.08em;">
@@ -403,11 +427,11 @@ function analyze(session){
 
   // Saccade histogram
   const sc=document.getElementById('saccadeCanvas');
-  sc.width=(sc.parentElement.clientWidth-72)*dpr;sc.height=160*dpr;
-  sc.style.width=(sc.parentElement.clientWidth-72)+'px';sc.style.height='160px';
+  sc.width=(sc.parentElement.clientWidth-72)*dpr;sc.height=190*dpr;
+  sc.style.width=(sc.parentElement.clientWidth-72)+'px';sc.style.height='190px';
   const sctx=sc.getContext('2d');
   sctx.setTransform(dpr,0,0,dpr,0,0);
-  drawHistogram(sctx,(sc.parentElement.clientWidth-72),160,amps,'var(--accent3)',20);
+  drawHistogram(sctx,(sc.parentElement.clientWidth-72),190,amps,isLight,20);
 
   // Saccade stats
   const sacStats=document.getElementById('saccadeStats');
@@ -436,7 +460,7 @@ function analyze(session){
   tc.style.width=(tc.parentElement.clientWidth-72)+'px';tc.style.height='160px';
   const tctx=tc.getContext('2d');
   tctx.setTransform(dpr,0,0,dpr,0,0);
-  drawTimeline(tctx,(tc.parentElement.clientWidth-72),160,validSamples,maxT,srcW,srcH);
+  drawTimeline(tctx,(tc.parentElement.clientWidth-72),160,validSamples,maxT,srcW,srcH,isLight);
 
   // Timeline stats
   const tlStats=document.getElementById('timelineStats');
@@ -457,7 +481,10 @@ function analyze(session){
 
 // ── Drawing helpers ────────────────────────────────────────
 
-function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH){
+function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH,isLight){
+  const gridCol=isLight?'rgba(26,24,20,0.08)'  :'rgba(255,255,255,0.05)';
+  const borderCol=isLight?'rgba(26,24,20,0.12)':'rgba(255,255,255,0.08)';
+  const pathCol=isLight?'rgba(26,24,20,0.22)'  :'rgba(255,255,255,0.25)';
   const cw=W/N,ch=H/N;
   const maxC=Math.max(...counts,1);
   // cells
@@ -474,17 +501,17 @@ function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH){
     }
   }
   // grid lines
-  ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.5;
+  ctx.strokeStyle=gridCol;ctx.lineWidth=0.5;
   for(let i=1;i<N;i++){
     ctx.beginPath();ctx.moveTo(i*cw,0);ctx.lineTo(i*cw,H);ctx.stroke();
     ctx.beginPath();ctx.moveTo(0,i*ch);ctx.lineTo(W,i*ch);ctx.stroke();
   }
   // border
-  ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
+  ctx.strokeStyle=borderCol;ctx.lineWidth=1;
   ctx.strokeRect(0,0,W,H);
   // scanpath overlay
   if(scanpath.length>=2){
-    ctx.save();ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=0.8;ctx.setLineDash([2,3]);
+    ctx.save();ctx.strokeStyle=pathCol;ctx.lineWidth=0.8;ctx.setLineDash([2,3]);
     ctx.beginPath();
     scanpath.forEach((p,i)=>{
       const x=(p.x_px/srcW)*W,y=(p.y_px/srcH)*H;
@@ -496,11 +523,11 @@ function drawDensityMap(ctx,W,H,counts,N,scanpath,srcW,srcH){
   for(const p of scanpath){
     const x=(p.x_px/srcW)*W,y=(p.y_px/srcH)*H;
     ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);
-    ctx.fillStyle='rgba(100,184,240,0.9)';ctx.fill();
+    ctx.fillStyle=isLight?'rgba(43,122,179,0.85)':'rgba(100,184,240,0.9)';ctx.fill();
   }
 }
 
-function drawHistogram(ctx,W,H,values,color,nBins){
+function drawHistogram(ctx,W,H,values,isLight,nBins){
   if(!values.length)return;
   const minV=0,maxV=Math.max(...values)*1.05;
   const binW=(maxV-minV)/nBins;
@@ -510,42 +537,57 @@ function drawHistogram(ctx,W,H,values,color,nBins){
     bins[bi]++;
   }
   const maxB=Math.max(...bins,1);
-  const barW=(W-2)/nBins;
-  const pad=6;
 
-  // axes
-  ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(0,H-pad);ctx.lineTo(W,H-pad);ctx.stroke();
+  // Layout zones: topZone for mean label, bottomZone for axis labels
+  const topZone=20, bottomZone=18;
+  const chartH=H-topZone-bottomZone;
+  const baseline=topZone+chartH;
+  const barW=(W-2)/nBins;
+
+  const axisCol=isLight?'rgba(26,24,20,0.10)':'rgba(255,255,255,0.08)';
+  const labelCol=isLight?'rgba(26,24,20,0.32)':'rgba(255,255,255,0.28)';
+  const barBase=isLight?[200,96,42]:[210,130,80];
+
+  // baseline
+  ctx.strokeStyle=axisCol;ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
 
   // bars
   for(let i=0;i<nBins;i++){
-    const bh=((bins[i]/maxB)*(H-pad*2-10));
-    const x=i*barW+1,y=H-pad-bh;
-    const alpha=0.25+0.7*(bins[i]/maxB);
-    ctx.fillStyle=color.replace('var(--accent3)','rgba(240,150,100,'+alpha+')');
-    // fallback color
-    ctx.fillStyle=`rgba(240,150,100,${alpha})`;
-    ctx.fillRect(x,y,barW-1,bh);
+    const bh=(bins[i]/maxB)*chartH;
+    if(bh<0.5)continue;
+    const x=i*barW+1, y=baseline-bh;
+    const alpha=0.20+0.75*(bins[i]/maxB);
+    ctx.fillStyle=`rgba(${barBase[0]},${barBase[1]},${barBase[2]},${alpha})`;
+    ctx.fillRect(x, y, Math.max(1,barW-1), bh);
   }
 
-  // x-axis labels (min, mean, max)
-  ctx.fillStyle='rgba(255,255,255,0.25)';ctx.font='9px "Space Mono",monospace';
-  ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText('0px',2,H-pad+3);
-  ctx.textAlign='right';ctx.fillText(Math.round(maxV)+'px',W-2,H-pad+3);
+  // mean line + label (inside topZone, above bars)
   const meanV=values.reduce((a,b)=>a+b,0)/values.length;
-  const mx=(meanV/maxV)*W;
-  ctx.strokeStyle='rgba(240,150,100,0.5)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
-  ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,H-pad);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle='rgba(240,150,100,0.6)';ctx.textAlign='center';ctx.textBaseline='top';
-  ctx.fillText('μ='+Math.round(meanV)+'px',mx,2);
+  const mx=Math.min(W-2, (meanV/maxV)*W);
+  ctx.strokeStyle='rgba(200,96,42,0.55)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(mx,topZone);ctx.lineTo(mx,baseline);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='rgba(200,96,42,0.75)';ctx.font='9px "DM Mono",monospace';
+  ctx.textAlign='center';ctx.textBaseline='bottom';
+  ctx.fillText('μ='+Math.round(meanV)+'px', mx, topZone-1);
+
+  // axis labels inside bottomZone
+  ctx.fillStyle=labelCol;ctx.font='9px "DM Mono",monospace';
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillText('0px', 2, baseline+4);
+  ctx.textAlign='right';
+  ctx.fillText(Math.round(maxV)+'px', W-2, baseline+4);
 }
 
-function drawTimeline(ctx,W,H,samples,maxT,srcW,srcH){
+function drawTimeline(ctx,W,H,samples,maxT,srcW,srcH,isLight){
   if(samples.length<2)return;
   const pad=6;
 
+  const tlAxisCol=isLight?'rgba(26,24,20,0.08)':'rgba(255,255,255,0.06)';
+  const tlLabelCol=isLight?'rgba(26,24,20,0.28)':'rgba(255,255,255,0.18)';
   // x-axis
-  ctx.strokeStyle='rgba(255,255,255,0.06)';ctx.lineWidth=0.5;
+  ctx.strokeStyle=tlAxisCol;ctx.lineWidth=0.5;
   ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();
   ctx.beginPath();ctx.moveTo(0,H-pad);ctx.lineTo(W,H-pad);ctx.stroke();
 
@@ -576,7 +618,7 @@ function drawTimeline(ctx,W,H,samples,maxT,srcW,srcH){
   ctx.setLineDash([]);ctx.restore();
 
   // labels
-  ctx.fillStyle='rgba(255,255,255,0.18)';ctx.font='8px "Space Mono",monospace';
+  ctx.fillStyle=tlLabelCol;ctx.font='8px "DM Mono",monospace';
   ctx.textAlign='left';ctx.textBaseline='middle';
   ctx.fillText('x',2,xMid);ctx.fillText('y',2,yMid);
   ctx.textAlign='right';
@@ -596,6 +638,70 @@ function stddev(arr){
   const m=arr.reduce((a,b)=>a+b,0)/arr.length;
   return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length);
 }
+
+// ── Theme toggle ───────────────────────────────────────────
+document.getElementById('btnBeige').addEventListener('click',()=>{
+  document.body.classList.add('light');
+  document.getElementById('btnBeige').classList.add('active');
+  document.getElementById('btnDark').classList.remove('active');
+  if(currentSession)analyze(currentSession);
+});
+document.getElementById('btnDark').addEventListener('click',()=>{
+  document.body.classList.remove('light');
+  document.getElementById('btnDark').classList.add('active');
+  document.getElementById('btnBeige').classList.remove('active');
+  if(currentSession)analyze(currentSession);
+});
+
+// ── Export PNG ─────────────────────────────────────────────
+document.getElementById('exportBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('exportBtn');
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  // Load html2canvas if not already present
+  if (!window.html2canvas) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  const isLight = document.body.classList.contains('light');
+  const appEl = document.getElementById('app');
+
+  try {
+    const canvas = await html2canvas(appEl, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: isLight ? '#f5f0e8' : '#0a0a0f',
+      logging: false,
+      width: appEl.scrollWidth,
+      height: appEl.scrollHeight,
+      windowWidth: appEl.scrollWidth,
+      windowHeight: appEl.scrollHeight,
+    });
+
+    canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const pid = document.getElementById('metaPid').textContent.replace(/[^a-zA-Z0-9_-]/g,'') || 'p';
+      const cond = document.getElementById('metaCond').textContent.replace(/[^a-zA-Z0-9_-]/g,'') || 'cond';
+      a.download = `gaze_metrics_${pid}_${cond}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }, 'image/png');
+  } catch(e) {
+    console.error(e);
+    alert('Export failed: ' + e.message);
+  }
+
+  btn.textContent = '↓ PNG';
+  btn.disabled = false;
+});
 </script>
 </body>
 </html>
