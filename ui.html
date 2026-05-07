@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Adaptive Olfactory System</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; background: #d0ccd8; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+#app {
+  width: 100%; max-width: 390px; min-height: 100dvh;
+  background: linear-gradient(145deg, #ede4d8 0%, #ddd4e4 35%, #ccd4e8 70%, #c0ccdf 100%);
+  color: #1a1228; position: relative; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+@media (min-height: 700px) {
+  #app { min-height: 780px; border-radius: 40px; }
+}
+.screen { display: none; flex-direction: column; width: 100%; min-height: 100%; }
+.screen.active { display: flex; }
+.top-bar { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 10px; flex-shrink: 0; }
+.top-bar-time { font-size: 13px; font-weight: 500; color: rgba(30,20,60,0.4); }
+.muse-badge { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.25); border: 0.5px solid rgba(255,255,255,0.65); border-radius: 20px; padding: 6px 12px; }
+.signal-dot { width: 6px; height: 6px; border-radius: 50%; background: #5b8a5f; flex-shrink: 0; animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.muse-label { font-size: 11px; font-weight: 500; color: rgba(30,20,60,0.6); }
+.calib-inner { display: flex; flex-direction: column; align-items: center; padding: 16px 28px 40px; flex: 1; }
+.calib-title { font-size: 24px; font-weight: 500; color: #1a1228; text-align: center; margin-bottom: 32px; letter-spacing: -0.02em; }
+.feel-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; width: 100%; }
+.frosted {
+  background: rgba(255,255,255,0.25);
+  border: 0.5px solid rgba(255,255,255,0.65);
+  border-radius: 18px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.18s;
+}
+.frosted:active { transform: scale(0.97); }
+.feel-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 12px 15px; text-align: center; width: 100%; }
+.feel-icon { font-size: 26px; line-height: 1; }
+.feel-label { font-size: 13px; font-weight: 500; color: #1a1228; }
+.feel-sub { font-size: 10px; color: rgba(30,20,60,0.45); }
+.home-header { padding: 4px 24px 12px; flex-shrink: 0; }
+.home-header p { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(30,20,60,0.4); font-weight: 400; margin-bottom: 4px; }
+.home-header h2 { font-size: 26px; font-weight: 500; color: #1a1228; letter-spacing: -0.02em; }
+canvas#eegCanvas { width: 100%; height: 110px; display: block; }
+.mode-label-txt { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: rgba(30,20,60,0.35); padding: 10px 24px 8px; }
+.modes { flex: 1; padding: 0 16px 28px; display: flex; flex-direction: column; gap: 8px; }
+.mode-btn { display: flex; align-items: center; gap: 14px; padding: 15px 18px; border-radius: 18px; }
+.mode-btn:active { transform: scale(0.99); }
+.mode-icon { width: 36px; min-width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; background: rgba(255,255,255,0.3); border: 0.5px solid rgba(255,255,255,0.5); }
+.mode-info { flex: 1; min-width: 0; }
+.mode-name { font-size: 14px; font-weight: 500; color: #1a1228; margin-bottom: 2px; }
+.mode-desc { font-size: 11px; line-height: 1.4; color: rgba(30,20,60,0.5); }
+.mode-scents { font-size: 10px; color: rgba(30,20,60,0.35); margin-top: 3px; }
+.mode-screen { flex-direction: column; position: relative; min-height: 100dvh; }
+.mode-bg { position: absolute; inset: 0; background: linear-gradient(145deg, #ede4d8 0%, #ddd4e4 35%, #ccd4e8 70%, #c0ccdf 100%); }
+canvas.mode-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mode-top { position: relative; z-index: 10; padding: 14px 20px 0; display: flex; align-items: center; justify-content: space-between; }
+.back-btn { display: flex; align-items: center; justify-content: center; width: 38px; min-width: 38px; height: 38px; border-radius: 50% !important; font-size: 17px; color: rgba(30,20,60,0.6); }
+.active-badge { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(30,20,60,0.45); padding: 5px 13px; border-radius: 20px !important; display: flex; align-items: center; gap: 5px; }
+.active-dot { width: 5px; height: 5px; border-radius: 50%; background: #5b8a5f; animation: blink 2s infinite; }
+.mode-content { position: relative; z-index: 10; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 22px 48px; }
+.mode-tag { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 6px; font-weight: 400; color: rgba(30,20,60,0.45); }
+.mode-big-name { font-size: 36px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 6px; color: #1a1228; }
+.mode-neural { font-size: 12px; margin-bottom: 20px; line-height: 1.6; color: rgba(30,20,60,0.5); }
+.scent-card { border-radius: 20px !important; padding: 16px 18px; }
+.scent-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(30,20,60,0.35); margin-bottom: 10px; }
+.scent-list { display: flex; gap: 7px; flex-wrap: wrap; }
+.scent-pill { border-radius: 20px; padding: 5px 14px; font-size: 12px; background: rgba(255,255,255,0.3); border: 0.5px solid rgba(255,255,255,0.65); color: #1a1228; }
+.diffusion-row { display: flex; align-items: center; gap: 10px; margin-top: 13px; padding-top: 12px; border-top: 0.5px solid rgba(30,20,60,0.08); }
+.diff-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: #5b8a5f; animation: blink 2.5s infinite; }
+.diff-text { font-size: 11px; color: rgba(30,20,60,0.4); }
+.diff-bar { flex: 1; height: 2px; background: rgba(30,20,60,0.1); border-radius: 2px; overflow: hidden; }
+.diff-fill { height: 100%; border-radius: 2px; background: rgba(30,20,60,0.3); animation: fill 4s ease-out forwards; }
+@keyframes fill { from{width:0%} to{width:100%} }
+.diff-mode { font-size: 10px; color: rgba(30,20,60,0.3); text-transform: uppercase; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="calibScreen" class="screen active">
+    <div class="top-bar">
+      <span class="top-bar-time">10:01</span>
+      <div class="muse-badge"><div class="signal-dot"></div><span class="muse-label">MUSE connected</span></div>
+    </div>
+    <div class="calib-inner">
+      <div class="calib-title">How are you feeling?</div>
+      <div class="feel-grid">
+        <div class="frosted feel-btn" onclick="goHome()"><span class="feel-icon">😌</span><span class="feel-label">Calm</span><span class="feel-sub">settled, grounded</span></div>
+        <div class="frosted feel-btn" onclick="goHome()"><span class="feel-icon">😤</span><span class="feel-label">Stressed</span><span class="feel-sub">overwhelmed, under pressure</span></div>
+        <div class="frosted feel-btn" onclick="goHome()"><span class="feel-icon">✨</span><span class="feel-label">Excited</span><span class="feel-sub">energized, buzzing</span></div>
+        <div class="frosted feel-btn" onclick="goHome()"><span class="feel-icon">😴</span><span class="feel-label">Tired</span><span class="feel-sub">foggy, low energy</span></div>
+        <div class="frosted feel-btn" onclick="goHome()"><span class="feel-icon">🎯</span><span class="feel-label">Focused</span><span class="feel-sub">alert, in flow</span></div>
+        <div class="frosted feel-btn" onclick="goHome()"><span class="feel-icon">😰</span><span class="feel-label">Anxious</span><span class="feel-sub">racing thoughts, on edge</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="homeScreen" class="screen">
+    <div class="top-bar">
+      <span class="top-bar-time">10:01</span>
+      <div class="muse-badge"><div class="signal-dot"></div><span class="muse-label">MUSE connected</span></div>
+    </div>
+    <div class="home-header">
+      <p>Adaptive Olfactory System</p>
+      <h2>Select your mode</h2>
+    </div>
+    <canvas id="eegCanvas"></canvas>
+    <div class="mode-label-txt">Neural states</div>
+    <div class="modes">
+      <div class="frosted mode-btn" onclick="openMode(1)">
+        <div class="mode-icon">🌿</div>
+        <div class="mode-info"><div class="mode-name">Relax / wind down</div><div class="mode-desc">Low arousal · slow-wave dominant · pre-sleep</div><div class="mode-scents">bergamot · sandalwood · ylang-ylang</div></div>
+      </div>
+      <div class="frosted mode-btn" onclick="openMode(2)">
+        <div class="mode-icon">⚡</div>
+        <div class="mode-info"><div class="mode-name">Alert / energized</div><div class="mode-desc">High arousal · beta-dominant · morning activation</div><div class="mode-scents">lemon · pine · vetiver</div></div>
+      </div>
+      <div class="frosted mode-btn" onclick="openMode(3)">
+        <div class="mode-icon">🎨</div>
+        <div class="mode-info"><div class="mode-name">Creative flow</div><div class="mode-desc">Alpha-beta border · diffused attention · associative thinking</div><div class="mode-scents">jasmine · cedarwood · bergamot</div></div>
+      </div>
+      <div class="frosted mode-btn" onclick="openMode(4)">
+        <div class="mode-icon">🧠</div>
+        <div class="mode-info"><div class="mode-name">Deep focus</div><div class="mode-desc">High engagement · moderate calm · demanding cognitive work</div><div class="mode-scents">rosemary · eucalyptus · peppermint</div></div>
+      </div>
+      <div class="frosted mode-btn" onclick="openMode(5)">
+        <div class="mode-icon">☁️</div>
+        <div class="mode-info"><div class="mode-name">Calm focus</div><div class="mode-desc">Relaxed but attentive · reading · writing · creative work</div><div class="mode-scents">lavender · frankincense · bergamot</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modeScreen" class="screen mode-screen">
+    <div class="mode-bg"><canvas class="mode-canvas" id="modeCanvas"></canvas></div>
+    <div class="mode-top">
+      <div class="frosted back-btn" onclick="backToHome()">←</div>
+      <div class="frosted active-badge"><div class="active-dot"></div>diffusing</div>
+    </div>
+    <div class="mode-content">
+      <div class="mode-tag" id="modeTag"></div>
+      <div class="mode-big-name" id="modeBigName"></div>
+      <div class="mode-neural" id="modeNeural"></div>
+      <div class="frosted scent-card">
+        <div class="scent-label">Scent profile</div>
+        <div class="scent-list" id="scentList"></div>
+        <div class="diffusion-row">
+          <div class="diff-dot"></div>
+          <div class="diff-text">Releasing</div>
+          <div class="diff-bar"><div class="diff-fill" id="diffFill"></div></div>
+          <div class="diff-mode">ambient</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const modes={1:{name:"Relax / wind down",tag:"mode 01",neural:"Low arousal · slow-wave dominant\nFor recovery and pre-sleep transitions",scents:["bergamot","sandalwood","ylang-ylang"],type:"slow"},2:{name:"Alert / energized",tag:"mode 02",neural:"High arousal · beta-dominant\nFor morning activation or breaking fatigue",scents:["lemon","pine","vetiver"],type:"pulse"},3:{name:"Creative flow",tag:"mode 03",neural:"Alpha-beta border state · diffused attention\nAssociative thinking and open exploration",scents:["jasmine","cedarwood","bergamot"],type:"flow"},4:{name:"Deep focus",tag:"mode 04",neural:"High engagement · moderate calm\nOptimal for demanding cognitive work",scents:["rosemary","eucalyptus","peppermint"],type:"grid"},5:{name:"Calm focus",tag:"mode 05",neural:"Relaxed but attentive · reading & writing\nGentle engagement without overstimulation",scents:["lavender","frankincense","bergamot"],type:"breath"}};
+const modeColors={slow:"rgba(80,140,110",pulse:"rgba(180,140,60",flow:"rgba(120,90,180",grid:"rgba(60,100,190",breath:"rgba(170,80,140"};
+let animFrame=null;
+function eegWave(){const c=document.getElementById('eegCanvas');if(!c)return;const ctx=c.getContext('2d');c.width=(c.offsetWidth||390)*devicePixelRatio;c.height=110*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio);const W=c.offsetWidth||390;let t=0;(function loop(){ctx.clearRect(0,0,W,110);[['rgba(60,60,140,0.35)',1.5,0],['rgba(60,60,140,0.12)',1,1.2]].forEach(([col,lw,ph])=>{ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();for(let x=0;x<W;x++){const y=55+Math.sin(x*0.035+t*0.07+ph)*13+Math.sin(x*0.018+t*0.045)*7+Math.sin(x*0.08+t*0.12)*3+(Math.random()-.5)*0.8;x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();});t++;requestAnimationFrame(loop);})();}
+function goHome(){document.getElementById('calibScreen').classList.remove('active');document.getElementById('homeScreen').classList.add('active');eegWave();}
+function backToHome(){if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}document.getElementById('modeScreen').classList.remove('active');document.getElementById('homeScreen').classList.add('active');}
+function openMode(id){const m=modes[id];document.getElementById('modeTag').textContent=m.tag;document.getElementById('modeBigName').textContent=m.name;document.getElementById('modeNeural').textContent=m.neural;const sl=document.getElementById('scentList');sl.innerHTML='';m.scents.forEach(s=>{const p=document.createElement('span');p.className='scent-pill';p.textContent=s;sl.appendChild(p);});const df=document.getElementById('diffFill');df.style.animation='none';void df.offsetWidth;df.style.animation='fill 4s ease-out forwards';document.getElementById('homeScreen').classList.remove('active');document.getElementById('modeScreen').classList.add('active');if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}setTimeout(()=>runAnim(m),60);}
+function runAnim(m){const cv=document.getElementById('modeCanvas');if(!cv)return;const ctx=cv.getContext('2d');const W=cv.offsetWidth||390,H=cv.offsetHeight||780;cv.width=W*devicePixelRatio;cv.height=H*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio);const base=modeColors[m.type];const col=(a)=>`${base},${a})`;let t=0,pts=[];if(m.type==='flow'){for(let i=0;i<55;i++)pts.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.5,vy:(Math.random()-.5)*.5,r:Math.random()*2.5+1,o:Math.random()});}else if(m.type==='pulse')pts=Array.from({length:6},(_,i)=>({r:i*55+30,a:0.28-i*0.04}));else if(m.type==='slow')pts=Array.from({length:9},(_,i)=>({ph:i*Math.PI/4.5,amp:22+i*12,spd:0.0022+i*0.0007}));else if(m.type==='grid')pts=Array.from({length:48},(_,i)=>({x:(i%8)*50+15,y:Math.floor(i/8)*75+50,a:0,d:i*1.8}));else pts=[{}];
+(function loop(){ctx.clearRect(0,0,W,H);if(m.type==='flow'){pts.forEach(p=>{p.x+=p.vx+Math.sin(t*0.009+p.y*0.004)*0.3;p.y+=p.vy+Math.cos(t*0.009+p.x*0.004)*0.3;if(p.x<-8)p.x=W+8;if(p.x>W+8)p.x=-8;if(p.y<-8)p.y=H+8;if(p.y>H+8)p.y=-8;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=col(0.2+Math.sin(t*0.018+p.o*5)*0.07);ctx.fill();});for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<90){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=col(0.1*(1-d/90));ctx.lineWidth=0.5;ctx.stroke();}}}else if(m.type==='pulse'){const cx=W/2,cy=H*0.34;pts.forEach((p,i)=>{const wave=Math.sin(t*0.035-i*0.6);ctx.beginPath();ctx.arc(cx,cy,p.r+wave*10,0,Math.PI*2);ctx.strokeStyle=col(p.a);ctx.lineWidth=1;ctx.stroke();});ctx.beginPath();ctx.arc(cx,cy,8+Math.sin(t*0.07)*3,0,Math.PI*2);ctx.fillStyle=col(0.55);ctx.fill();}else if(m.type==='slow'){pts.forEach((p,i)=>{ctx.beginPath();for(let x=0;x<=W;x+=2){const y=H*0.36+Math.sin(x*0.007+t*p.spd+p.ph)*p.amp+Math.sin(x*0.014+t*p.spd*1.4)*p.amp*0.3;x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.strokeStyle=col(0.06+i*0.013);ctx.lineWidth=1.5;ctx.stroke();});}else if(m.type==='grid'){pts.forEach((p,i)=>{if(t>p.d)p.a=Math.min(0.45,(t-p.d)*0.016);ctx.beginPath();ctx.arc(p.x,p.y,1.5,0,Math.PI*2);ctx.fillStyle=col(p.a);ctx.fill();if(i%8!==7&&pts[i+1]){ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(pts[i+1].x,pts[i+1].y);ctx.strokeStyle=col(p.a*0.28);ctx.lineWidth=0.5;ctx.stroke();}if(pts[i+8]){ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(pts[i+8].x,pts[i+8].y);ctx.strokeStyle=col(p.a*0.28);ctx.lineWidth=0.5;ctx.stroke();}});}else{const cx=W/2,cy=H*0.34,br=55+Math.sin(t*0.022)*38;for(let r=8;r>=0;r--){ctx.beginPath();ctx.arc(cx,cy,br+r*30,0,Math.PI*2);ctx.strokeStyle=col(Math.max(0,0.055-r*0.005));ctx.lineWidth=1;ctx.stroke();}const grd=ctx.createRadialGradient(cx,cy,0,cx,cy,br*.7);grd.addColorStop(0,col(0.25));grd.addColorStop(1,col(0));ctx.beginPath();ctx.arc(cx,cy,br*.7,0,Math.PI*2);ctx.fillStyle=grd;ctx.fill();ctx.beginPath();ctx.arc(cx,cy,br*0.14,0,Math.PI*2);ctx.fillStyle=col(0.5);ctx.fill();}t++;animFrame=requestAnimationFrame(loop);})();}
+</script>
+</body>
+</html>
